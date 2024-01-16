@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional, Tuple
 
 import gin
 import jax
+from jax import core
 import jax.numpy as jnp
 from haiku._src.data_structures import FlatMap
 from learned_optimization import summary, training, tree_utils
@@ -397,7 +398,7 @@ class VectorizedFedLOptTruncatedStep(
         self.num_local_steps = num_local_steps
 
         self.data_shape = jax.tree_util.tree_map(
-            lambda x: jax.ShapedArray(shape=x.shape, dtype=x.dtype),
+            lambda x: core.ShapedArray(shape=x.shape, dtype=x.dtype),
             training.vec_get_batch(task_family, num_tasks, split="train", numpy=True),
         )
 
