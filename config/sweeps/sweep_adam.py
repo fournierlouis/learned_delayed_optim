@@ -8,6 +8,10 @@ num_grads = 8
 num_local_steps = 4
 
 sweep_config = dict(
+    entity= "fournierlouis",
+    project= "delayed_lo",
+    name= "sweep1",
+    controller=dict(type="local"),
     method="grid",
     metric=dict(name="test loss", goal="minimize"),
     parameters=dict(

@@ -15,6 +15,8 @@ from tasks import get_task
 import gin
 import optax
 
+from delay_utils import delayed_gradients
+
 @gin.configurable
 class AdamWLinearCosine(OptaxOptimizer):
     """Adam with a piecewise linear learning rate schedule."""
@@ -82,15 +84,13 @@ class AdamW(OptaxOptimizer):
     ):
         opt = optax.adamw(learning_rate)
         super().__init__(opt)
-
-
 def _sgd(args):
     opt = optax_opts.SGD(learning_rate=args.learning_rate)
 
     task = get_task(args)
 
     @jax.jit
-    def update(opt_state, key, batch):
+    def update(opt_state, key, batch, delayed_gradients_state=None):
         params = opt.get_params(opt_state)
 
         if args.needs_state:
@@ -99,6 +99,18 @@ def _sgd(args):
         else:
             l, grad = jax.value_and_grad(task.loss)(params, key, batch)
             s = None
+
+        if delayed_gradients_state is not None:
+            new_dg_state, grad = delayed_gradients(args.delay).update(grad)
+
+            delayed_gradients_state = new_dg_state
+            #delayed_gradients_state = tree_utils.match_type(new_dg_state,
+            #                                         delayed_gradients_state)
+
+            if not delayed_gradients_state.update:
+                return(opt_state, l, delayed_gradients_state)
+
+            return opt.update(opt_state, grad, loss=l, model_state=s), l, delayed_gradients_state
 
         return opt.update(opt_state, grad, loss=l, model_state=s), l
 
@@ -405,6 +417,7 @@ def get_optimizer(args):
     optimizers = {
         "adam": _adam,
         "sgd": _sgd,
+        "delayed_sgd": _delayed_sgd,
         "fedavg": _fedavg,
         "fedavg-slowmo": _fedavg_slowmo,
         "fedlopt": _fedlagg,

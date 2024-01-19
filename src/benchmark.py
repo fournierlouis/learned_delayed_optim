@@ -8,6 +8,7 @@ from tqdm import tqdm
 from optimizers import get_optimizer
 from tasks import get_task
 
+from delay_utils import delayed_gradients
 
 def rename_batch(batch, label_map):
     return {label_map[k]:v for k,v in batch.items()}
@@ -42,10 +43,16 @@ def benchmark(args):
         
         opt_state = opt.init(params, model_state=state, num_steps=args.num_inner_steps)
 
+        if args.delay_optim_test:
+            delay_gradients_state = delayed_gradients(args.delay).init(params)
+
         for _ in tqdm(range(args.num_inner_steps), ascii=True, desc="Inner Loop"):
             batch = rename_batch(next(task.datasets.train), data_label_map)
             key, key1 = jax.random.split(key)
-            opt_state, loss = update(opt_state, key1, batch)
+            if args.delay_optim_test:
+                opt_state, loss, delay_gradients_state = update(opt_state, key1, batch, delay_gradients_state)
+            else:
+                opt_state, loss = update(opt_state, key1, batch)
 
             key, key1 = jax.random.split(key)
             params = opt.get_params(opt_state)
@@ -69,16 +76,16 @@ def benchmark(args):
                 test_log = {"test loss": test_loss}
 
 
-            outer_valid_batch = rename_batch(next(test_task.datasets.outer_valid), data_label_map)
-            if args.needs_state:
-                state = opt.get_state(opt_state)
-                outer_valid_loss = test_task.loss(params, state, key1, outer_valid_batch)
-            else:
-                outer_valid_loss = test_task.loss(params, key1, outer_valid_batch)
+            #outer_valid_batch = rename_batch(next(test_task.datasets.outer_valid), data_label_map)
+            #if args.needs_state:
+            #    state = opt.get_state(opt_state)
+            #    outer_valid_loss = test_task.loss(params, state, key1, outer_valid_batch)
+            #else:
+            #    outer_valid_loss = test_task.loss(params, key1, outer_valid_batch)
             
             to_log = {
                     "train loss": loss,
-                    "outer valid loss": outer_valid_loss
+                    #"outer valid loss": outer_valid_loss
                 }
             to_log.update(test_log)
 
@@ -153,5 +160,8 @@ def sweep(args):
         args.sweep_id = wandb.sweep(
             sweep=args.sweep_config, project="learned_aggregation_meta_test"
         )
+
+    sweep = wandb.controller(args.sweep_id)
+    sweep.run()
 
     wandb.agent(args.sweep_id, sweep_fn, project="learned_aggregation_meta_test")
