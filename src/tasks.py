@@ -7,11 +7,11 @@ from learned_optimization.tasks.fixed.conv import _ConvTask, _cross_entropy_pool
 from learned_optimization.tasks.fixed.image_mlp import _MLPImageTask
 from learned_optimization.tasks.fixed.transformer_lm import _TransformerTask
 from learned_optimization.tasks.fixed.vit import (VisionTransformerTask, wide16_config, 
-            tall16_config, vit_p16_h128_m512_nh4_nl10_config, deit_tiny_config, deit_small_config)
+            tall16_config)#, vit_p16_h128_m512_nh4_nl10_config, deit_tiny_config, deit_small_config)
 from learned_optimization.tasks.fixed.vit_test import VITTest
 from learned_optimization.tasks.parametric.image_resnet import ParametricImageResNet
 from learned_optimization.tasks.resnet import ResNet
-from learned_optimization.tasks.fixed.resnet import _ResnetTaskDataset
+from learned_optimization.tasks.fixed.resnet import _ResnetTask#Dataset
 
 
 
@@ -506,20 +506,20 @@ def resnet18_imagenet_32(batch_size):
     datasets = imagenet_64_datasets(
         batch_size=batch_size, image_size=(32, 32), prefetch_batches=50
     )
-    task = _ResnetTaskDataset(datasets,cfg=dict(batch_size=batch_size,image_size=32,
+    task = _ResnetTask(cfg=dict(batch_size=batch_size,image_size=32,
                                 initial_conv_kernel_size=7,initial_conv_stride=2,resnet_v2=False, max_pool=True,
                                 **ResNet.CONFIGS[18]))
-    # task.datsets = datasets
+    task.datsets = datasets
     return task
 
 def resnet18_imagenet_64(batch_size):
     datasets = imagenet_64_datasets(
         batch_size=batch_size, image_size=(64, 64), prefetch_batches=50
     )
-    task = _ResnetTaskDataset(datasets,cfg=dict(batch_size=batch_size,image_size=64,
+    task = _ResnetTask(cfg=dict(batch_size=batch_size,image_size=64,
                                 initial_conv_kernel_size=7,initial_conv_stride=2,resnet_v2=False, max_pool=True,
                                 **ResNet.CONFIGS[18]))
-    # task.datsets = datasets
+    task.datsets = datasets
     return task
 
 
@@ -527,10 +527,10 @@ def resnet50_imagenet_32(batch_size):
     datasets = imagenet_64_datasets(
         batch_size=batch_size, image_size=(32, 32), prefetch_batches=50
     )
-    task = _ResnetTaskDataset(datasets,cfg=dict(batch_size=batch_size,image_size=32,
+    task = _ResnetTask(cfg=dict(batch_size=batch_size,image_size=32,
                                 initial_conv_kernel_size=7,initial_conv_stride=2,resnet_v2=False, max_pool=True,
                                 **ResNet.CONFIGS[50]))
-    # task.datsets = datasets
+    task.datsets = datasets
     return task
 
 
@@ -539,10 +539,10 @@ def resnet50_imagenet_128(batch_size):
     datasets = imagenet_64_datasets(
         batch_size=batch_size, image_size=(128, 128), prefetch_batches=20
     )
-    task = _ResnetTaskDataset(datasets,cfg=dict(batch_size=batch_size,image_size=128,
+    task = _ResnetTask(cfg=dict(batch_size=batch_size,image_size=128,
                                 initial_conv_kernel_size=7,initial_conv_stride=2,resnet_v2=False, max_pool=True,
                                 **ResNet.CONFIGS[50]))
-    # task.datsets = datasets
+    task.datsets = datasets
     return task
 
 
@@ -551,10 +551,10 @@ def resnet50_imagenet_64(batch_size):
     datasets = imagenet_64_datasets(
         batch_size=batch_size, image_size=(64, 64), prefetch_batches=50
     )
-    task = _ResnetTaskDataset(datasets,cfg=dict(batch_size=batch_size,image_size=64,
+    task = _ResnetTask(cfg=dict(batch_size=batch_size,image_size=64,
                                 initial_conv_kernel_size=7,initial_conv_stride=2,resnet_v2=False, max_pool=True,
                                 **ResNet.CONFIGS[50]))
-    # task.datsets = datasets
+    task.datsets = datasets
     return task
 
 

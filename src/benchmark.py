@@ -69,16 +69,16 @@ def benchmark(args):
                 test_log = {"test loss": test_loss}
 
 
-            outer_valid_batch = rename_batch(next(test_task.datasets.outer_valid), data_label_map)
-            if args.needs_state:
-                state = opt.get_state(opt_state)
-                outer_valid_loss = test_task.loss(params, state, key1, outer_valid_batch)
-            else:
-                outer_valid_loss = test_task.loss(params, key1, outer_valid_batch)
+            #outer_valid_batch = rename_batch(next(test_task.datasets.outer_valid), data_label_map)
+            #if args.needs_state:
+            #    state = opt.get_state(opt_state)
+            #    outer_valid_loss = test_task.loss(params, state, key1, outer_valid_batch)
+            #else:
+            #    outer_valid_loss = test_task.loss(params, key1, outer_valid_batch)
             
             to_log = {
                     "train loss": loss,
-                    "outer valid loss": outer_valid_loss
+                    #"outer valid loss": outer_valid_loss
                 }
             to_log.update(test_log)
 
@@ -149,9 +149,14 @@ def sweep(args):
 
         run.finish()
 
+    print("id", args.sweep_id)
+    print('c', args.sweep_config)
+
     if args.sweep_id is None:
         args.sweep_id = wandb.sweep(
             sweep=args.sweep_config, project="learned_aggregation_meta_test"
         )
+
+    print('agent', args.sweep_id)
 
     wandb.agent(args.sweep_id, sweep_fn, project="learned_aggregation_meta_test")

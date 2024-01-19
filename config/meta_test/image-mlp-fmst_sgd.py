@@ -1,7 +1,7 @@
 _base_ = ["./meta_test_base.py"]
 
 optimizer = "sgd"
-task = "resnet18_imagenet_32"
+task =  "image-mlp-fmst" #"small-conv-c10" #"resnet18_imagenet_32"
 num_inner_steps = 1000
 
 num_grads = 8
