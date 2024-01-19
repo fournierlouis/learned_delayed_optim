@@ -7,7 +7,7 @@ from learned_optimization.tasks.fixed.conv import _ConvTask, _cross_entropy_pool
 from learned_optimization.tasks.fixed.image_mlp import _MLPImageTask
 from learned_optimization.tasks.fixed.transformer_lm import _TransformerTask
 from learned_optimization.tasks.fixed.vit import (VisionTransformerTask, wide16_config, 
-            tall16_config)#, vit_p16_h128_m512_nh4_nl10_config, deit_tiny_config, deit_small_config)
+            tall16_config) #vit_p16_h128_m512_nh4_nl10_config, deit_tiny_config, deit_small_config)
 from learned_optimization.tasks.fixed.vit_test import VITTest
 from learned_optimization.tasks.parametric.image_resnet import ParametricImageResNet
 from learned_optimization.tasks.resnet import ResNet
