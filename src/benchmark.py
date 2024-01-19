@@ -156,6 +156,9 @@ def sweep(args):
 
         run.finish()
 
+    print("id", args.sweep_id)
+    print('c', args.sweep_config)
+
     if args.sweep_id is None:
         args.sweep_id = wandb.sweep(
             sweep=args.sweep_config, project="learned_aggregation_meta_test"
@@ -163,5 +166,7 @@ def sweep(args):
 
     sweep = wandb.controller(args.sweep_id)
     sweep.run()
+
+    print('agent', args.sweep_id)
 
     wandb.agent(args.sweep_id, sweep_fn, project="learned_aggregation_meta_test")
