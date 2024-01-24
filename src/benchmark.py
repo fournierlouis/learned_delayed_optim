@@ -22,6 +22,8 @@ def benchmark(args):
     task = get_task(args)
     test_task = get_task(args, is_test=True)
 
+    print("args", args)
+
     opt, update = get_optimizer(args)
 
 
@@ -51,6 +53,7 @@ def benchmark(args):
             key, key1 = jax.random.split(key)
             if args.delay_optim_test:
                 opt_state, loss, delay_gradients_state = update(opt_state, key1, batch, delay_gradients_state)
+                #print("up", delay_gradients_state.i, delay_gradients_state.update)
             else:
                 opt_state, loss = update(opt_state, key1, batch)
 

@@ -4,6 +4,7 @@ import pickle
 import jax
 import jax.numpy as jnp
 from haiku._src.data_structures import FlatMap
+from learned_optimization import tree_utils
 from learned_optimization.optimizers import base as opt_base
 from learned_optimization.optimizers import optax_opts, OptaxOptimizer
 
@@ -84,13 +85,17 @@ class AdamW(OptaxOptimizer):
     ):
         opt = optax.adamw(learning_rate)
         super().__init__(opt)
+
 def _sgd(args):
-    opt = optax_opts.SGD(learning_rate=args.learning_rate)
+    #opt = optax_opts.SGD(learning_rate=args.local_learning_rate)
+    opt = opt_base.Adam(args.learning_rate)
 
     task = get_task(args)
 
+    do_delay = args.delay_optim_test
+
     @jax.jit
-    def update(opt_state, key, batch, delayed_gradients_state=None):
+    def update_nodelay(opt_state, key, batch):
         params = opt.get_params(opt_state)
 
         if args.needs_state:
@@ -100,30 +105,56 @@ def _sgd(args):
             l, grad = jax.value_and_grad(task.loss)(params, key, batch)
             s = None
 
-        if delayed_gradients_state is not None:
-            new_dg_state, grad = delayed_gradients(args.delay).update(grad)
-
-            delayed_gradients_state = new_dg_state
-            #delayed_gradients_state = tree_utils.match_type(new_dg_state,
-            #                                         delayed_gradients_state)
-
-            if not delayed_gradients_state.update:
-                return(opt_state, l, delayed_gradients_state)
-
-            return opt.update(opt_state, grad, loss=l, model_state=s), l, delayed_gradients_state
+        #new_s = opt.update(opt_state, grad, loss=l, model_state=s)
+        #return opt.init(opt.get_params(new_s), model_state=opt.get_state(new_s)), l
 
         return opt.update(opt_state, grad, loss=l, model_state=s), l
+
+
+    @jax.jit
+    def update_delay(opt_state, key, batch, delayed_gradients_state):
+        params = opt.get_params(opt_state)
+
+        if args.needs_state:
+            state = opt.get_state(opt_state)
+            (l, s), grad = jax.value_and_grad(task.loss_with_state, has_aux=True)(params, state, key, batch)
+        else:
+            l, grad = jax.value_and_grad(task.loss)(params, key, batch)
+            s = None
+
+        #jax.debug.print("BE4 gr {g}, upd {u}, dgs {dg}", g=grad, u=delayed_gradients_state.update, dg=delayed_gradients_state)
+
+        new_dg_state, grad = delayed_gradients(args.delay).update(delayed_gradients_state, grad)
+            
+        delayed_gradients_state = tree_utils.match_type(new_dg_state,
+                                                     delayed_gradients_state)
+
+        out = jax.lax.cond(delayed_gradients_state.update, 
+            lambda o, g, l, s, d: (opt.update(o,g,loss=l,model_state=s), l, d), 
+            lambda o, g, l, s, d: (o, l, d),
+            opt_state, grad, l, s, delayed_gradients_state)
+    
+        #jax.debug.print("gr {g}, upd {u}, dgs {dg}", g=grad, u=delayed_gradients_state.update, dg=delayed_gradients_state)
+
+        return out
+
+    if do_delay:
+        update = update_delay
+    else:
+        update = update_nodelay
 
     return opt, update
 
 
 def _adam(args):
-    opt = opt_base.Adam(args.learning_rate)
+    #opt = opt_base.Adam(args.learning_rate)
+    opt = optax_opts.SGD(learning_rate=args.local_learning_rate)
 
     task = get_task(args)
 
     @jax.jit
     def update(opt_state, key, batch):
+        print('bad update')
         params = opt.get_params(opt_state)
 
         if args.needs_state:
@@ -133,7 +164,66 @@ def _adam(args):
             l, grad = jax.value_and_grad(task.loss)(params, key, batch)
             s = None
 
-        return opt.update(opt_state, grad, loss=l, model_state=s), l
+        new_s = opt.update(opt_state, grad, loss=l, model_state=s)
+        return opt.init(opt.get_params(new_s), model_state=opt.get_state(new_s)), l
+
+    @jax.jit
+    def update_1(opt_state, key, batch):
+        print('good update')
+        images = jnp.array(batch["image"])
+        labels = jnp.array(batch["label"])
+
+        def split(arr, split_factor):
+            """Splits the first axis of `arr` evenly across the number of devices."""
+            return arr.reshape(
+                split_factor, arr.shape[0] // split_factor, *arr.shape[1:]
+            )
+
+        images = split(images, args.num_grads)
+        labels = split(labels, args.num_grads)
+
+        def local_updates(im, lab):
+            local_opt_state = copy.deepcopy(opt_state)
+            s_c_images = split(im, args.num_local_steps)
+            s_c_labels = split(lab, args.num_local_steps)
+
+            s_c_batch = []
+            for i in range(args.num_local_steps):
+                sub_batch_dict = {}
+                sub_batch_dict["image"] = s_c_images[i]
+                sub_batch_dict["label"] = s_c_labels[i]
+                s_c_batch.append(FlatMap(sub_batch_dict))
+
+            losses = []
+
+            for sub_client_batch in s_c_batch:
+                params = opt.get_params(local_opt_state)
+
+                if args.needs_state:
+                    state = opt.get_state(local_opt_state)
+                    (l, s), grad = jax.value_and_grad(task.loss_with_state, has_aux=True)(params, state, key, sub_client_batch)
+                else:
+                    l, grad = jax.value_and_grad(task.loss)(params, key, sub_client_batch)
+                    s = None
+
+                losses.append(l)
+                local_opt_state = opt.update(local_opt_state, grad, loss=l, model_state=s)
+
+            return jnp.mean(jnp.array(losses)), opt.get_params(local_opt_state), opt.get_state(local_opt_state) if args.needs_state else None
+
+        losses, new_params, new_state = jax.vmap(local_updates)(images, labels)
+        avg_params = jax.tree_util.tree_map(
+            lambda p, nps: jnp.mean(nps, axis=0), opt.get_params(opt_state), new_params
+        )
+        if args.needs_state:
+            avg_state = jax.tree_util.tree_map(
+                lambda s, ns: jnp.mean(ns, axis=0), opt.get_state(opt_state), new_state
+            )
+        else:
+            avg_state = None
+
+        return opt.init(avg_params, model_state=avg_state), jnp.mean(jnp.array(losses))
+
 
     return opt, update
 
@@ -417,7 +507,6 @@ def get_optimizer(args):
     optimizers = {
         "adam": _adam,
         "sgd": _sgd,
-        "delayed_sgd": _delayed_sgd,
         "fedavg": _fedavg,
         "fedavg-slowmo": _fedavg_slowmo,
         "fedlopt": _fedlagg,

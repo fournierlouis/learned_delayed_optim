@@ -105,9 +105,12 @@ if __name__ == "__main__":
     sys.path.append(os.getcwd())
     os.environ["TFDS_DATA_DIR"] = args.tfds_data_dir
     os.environ["WANDB_DIR"] = args.wandb_dir
+    print("wb dir", os.environ["WANDB_DIR"])
+    
+    #print('args', args)
 
     cfg = Config.fromfile(args.config)
-
+    
     # override args from the command line
     for k, v in vars(args).items():
         if v is not None:
@@ -133,6 +136,8 @@ if __name__ == "__main__":
     args = argparse.Namespace(**cfg._cfg_dict)
 
     assert_args(args)
+
+    #print('args after', args)
 
     run_types = {"benchmark": benchmark, "meta-train": meta_train, "sweep": sweep}
 
