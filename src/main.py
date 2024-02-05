@@ -26,7 +26,8 @@ def parse_args():
                                                           "fedlopt", 
                                                           "fedlopt-adafac",
                                                           "delay-adafac",
-                                                          "delay",
+                                                          "mlp",
+                                                          "delay-mlp",
                                                           "fedlagg", 
                                                           "fedlagg-wavg", 
                                                           "fedlagg-adafac"])

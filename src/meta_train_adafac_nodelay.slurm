@@ -36,11 +36,9 @@ wandb offline
 
 set -x
 
-delay=${1}
 
 TFDS_DATA_DIR=$STORE/tf_datasets WANDB_DIR=$STORE/jax_wandb python src/main.py \
-    --config config/meta_train/meta_train_delay_adafac32_image-mlp-fmst_schedule_3e-3_10000_d3.py \
+    --config config/meta_train/meta_train_adafac32_image-mlp-fmst_schedule_3e-3_10000_d3.py \
     --num_local_steps 4 \
     --num_grads 8 \
-    --local_learning_rate 0.5 \
-    --delay ${delay}
+    --local_learning_rate 0.5

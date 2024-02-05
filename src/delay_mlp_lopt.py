@@ -41,7 +41,7 @@ class DelayMLPLOptState:
 # grad: f, diff: f,  out@diff = f -> pas d'interet si deja grad@iff non? a voir, out=fxf (trop), grad@diff=1 ok
 
 @gin.configurable
-class DelayFedMLPLOpt(lopt_base.LearnedOptimizer):
+class DelayMLPLOpt(lopt_base.LearnedOptimizer):
     """Learned optimizer leveraging a per parameter MLP. + Delayed gradients
     This is also known as LOLv2.
     """
