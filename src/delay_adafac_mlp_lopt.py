@@ -38,6 +38,18 @@ from learned_optimization.learned_optimizers.adafac_mlp_lopt import (
     tanh_embedding,
 )
 
+# To add
+# Staleness aware: add tau (useless)
+# Gap aware:
+# - diff theta -> norm &/or absolute value
+# momentum of norm&/ or absolute value of grad t-tau
+# inverse of momentum norm/abs value
+# adafactors on the difference of parameters?
+# diff of parameters
+# diff of parameters @ pointwise grad
+# outerproduct grad * (diff of parameters @ outerproduct?)
+# grad: f, diff: f,  out@diff = f -> pas d'interet si deja grad@iff non? a voir, out=fxf (trop), grad@diff=1 ok
+
 @flax.struct.dataclass
 class DelayAdafacMLPLOptState:
   params: Any
@@ -48,6 +60,7 @@ class DelayAdafacMLPLOptState:
   num_steps: jnp.ndarray
   iteration: jnp.ndarray
   delayed_gradients_acc: DelayedGradientsAccumulator
+  delayed_param_acc: DelayedGradientsAccumulator
 
 @gin.configurable
 class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
@@ -451,7 +464,7 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
             iteration=opt_state.iteration + 1,
             state=model_state,
             num_steps=opt_state.num_steps,
-            delayed_gradients_acc = delayed_gradients_acc)
+            delayed_gradients_acc=delayed_gradients_acc)
 
         return tree_utils.match_type(next_opt_state, opt_state)
 
