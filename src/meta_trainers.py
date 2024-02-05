@@ -6,12 +6,14 @@ from learned_optimization.outer_trainers import (
 )
 from learned_optimization.tasks import base as tasks_base
 from learned_optimization.learned_optimizers.adafac_mlp_lopt import AdafacMLPLOpt
+from learned_optimization.learned_optimizers.mlp_lopt import MLPLOpt
 from learned_optimization.outer_trainers import lopt_truncated_step
 
 from fed_adafac_mlp_lopt import FedAdafacMLPLOpt
 from fed_truncated_step import VectorizedFedLOptTruncatedStep
 from fed_mlp_lopt import FedMLPLOpt
 from delay_adafac_mlp_lopt import DelayAdafacMLPLOpt
+from delay_mlp_lopt import DelayMLPLOpt
 from tasks import get_task
 
 import optax
@@ -100,8 +102,17 @@ def _delay_meta_trainer(args):
         lagg = AdafacMLPLOpt(
             hidden_size=args.hidden_size,
         )
-    else:
+    elif args.optimizer in ["delay-adafac"]:
         lagg = DelayAdafacMLPLOpt(
+            hidden_size=args.hidden_size,
+            delay=args.delay
+        )
+    elif args.optimizer in ["mlp"]:
+        lagg = MLPLOpt(
+            hidden_size=args.hidden_size,
+        )
+    elif args.optimizer in ["delay-mlp"]:
+        lagg = DelayMLPLOpt(
             hidden_size=args.hidden_size,
             delay=args.delay
         )
@@ -168,7 +179,9 @@ def get_meta_trainer(args):
         "fedlagg-adafac": _fedlagg_meta_trainer,
 
         "adafac": _delay_meta_trainer,
-        "delay-adafac": _delay_meta_trainer
+        "delay-adafac": _delay_meta_trainer,
+        "mlp": _delay_meta_trainer,
+        "delay-mlp": _delay_meta_trainer
     }
 
     return meta_trainers[args.optimizer](args)  # TODO Find better way to do this
