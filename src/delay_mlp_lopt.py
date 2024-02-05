@@ -155,9 +155,10 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 is_valid: bool = False,
                 key: Optional[PRNGKey] = None,
             ) -> DelayMLPLOptState:
-                jax.debug.print('delay {d}', d=delay)
-                jax.debug.print('n grad {g}', g=grads)
-                jax.debug.print('old state {s}', s = opt_state.delayed_gradients_acc)
+                jax.debug.print('first delay {d}', d=delay)
+                jax.debug.print('2 n grad {g}', g=grads)
+                jax.debug.print('3 old state {s}', s = opt_state.delayed_gradients_acc)
+
                 next_delayed_gradients, old_grads = delayed_gradients(delay).update(opt_state.delayed_gradients_acc,
                                                                                    grads)
 
@@ -166,8 +167,9 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                                                                                        opt_state.params)
                 else:
                     next_delayed_param, old_params = None, None
-                jax.debug.print('o grad {g}', g=old_grads)
-                jax.debug.print('new state {s}', s = opt_state.delayed_gradients_acc)
+
+                jax.debug.print('4 o grad {g}', g=old_grads)
+                jax.debug.print(' 5 new state {s}', s = next_delayed_gradients)
 
                 return jax.lax.cond(next_delayed_gradients.update,
                                     self.update_true,
