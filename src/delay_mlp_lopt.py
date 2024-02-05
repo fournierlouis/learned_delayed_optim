@@ -364,7 +364,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                                                            opt_state.rolling_features),
                     iteration=opt_state.iteration + 1,
                     state=model_state,
-                    delayed_gradients_acc=delayed_gradients_acc)
+                    delayed_gradients_acc=delayed_gradients_acc,
+                    delayed_param_acc=delayed_params_acc if delay_features > 0 else None)
                 return next_opt_state
 
         return _Opt(self.num_grads, self._with_all_grads, self._with_avg)
