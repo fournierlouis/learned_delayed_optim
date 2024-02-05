@@ -20,6 +20,7 @@ from learned_optimization.learned_optimizers.mlp_lopt import (
 )
 from delay_utils import delayed_gradients, DelayedGradientsAccumulator
 
+import flax
 @flax.struct.dataclass
 class DelayMLPLOptState:
   params: Any
