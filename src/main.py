@@ -24,7 +24,9 @@ def parse_args():
                                                           "fedavg", 
                                                           "fedavg-slowmo", 
                                                           "fedlopt", 
-                                                          "fedlopt-adafac", 
+                                                          "fedlopt-adafac",
+                                                          "delay-adafac",
+                                                          "delay",
                                                           "fedlagg", 
                                                           "fedlagg-wavg", 
                                                           "fedlagg-adafac"])

@@ -411,6 +411,7 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
           key: Optional[PRNGKey] = None,
           delayed_gradients_acc: Any = None,
       ) -> DelayAdafacMLPLOptState:
+          #  jax.debug.print('false')
           next_opt_state = DelayAdafacMLPLOptState(
               params=opt_state.params,
               mom_rolling=opt_state.mom_rolling,
@@ -432,6 +433,7 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
           key: Optional[PRNGKey] = None,
           delayed_gradients_acc: Any = None,
       ) -> DelayAdafacMLPLOptState:
+        # jax.debug.print('true')
         mom_roll, rms_roll, fac_vec_roll = self._get_rolling()
         next_mom_rolling = mom_roll.update(opt_state.mom_rolling, grad)
         next_rms_rolling = rms_roll.update(opt_state.rms_rolling, grad)
@@ -477,7 +479,14 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
               is_valid: bool = False,
               key: Optional[PRNGKey] = None,
       ) -> DelayAdafacMLPLOptState:
+          #jax.debug.print('delay {d}', d=delay)
+          #jax.debug.print('n grad {g}', g=grad)
+          #jax.debug.print('old state {s}', s = opt_state.delayed_gradients_acc) 
+
           next_delayed_gradients, old_grad = delayed_gradients(delay).update(opt_state.delayed_gradients_acc, grad)
+
+          #jax.debug.print('old grad {g}', g=old_grad)
+          #jax.debug.print('new state {s}', s = next_delayed_gradients)
 
           return jax.lax.cond(next_delayed_gradients.update,
                               self.update_true,

@@ -98,12 +98,10 @@ def _fedlagg_meta_trainer(args):
 def _delay_meta_trainer(args):
     if args.optimizer in ["adafac"]:
         lagg = AdafacMLPLOpt(
-            num_grads=args.num_grads,
             hidden_size=args.hidden_size,
         )
     else:
         lagg = DelayAdafacMLPLOpt(
-            num_grads=args.num_grads,
             hidden_size=args.hidden_size,
             delay=args.delay
         )
