@@ -64,6 +64,9 @@ def parse_args():
     parser.add_argument("--delay", type=int, default=4)
     parser.add_argument("--delay_optim_test", action="store_true")
 
+    parser.add_argument("--slurm_id", type=int, default=-1)
+
+
     # fmt: on
 
     return parser.parse_args()
@@ -113,6 +116,11 @@ if __name__ == "__main__":
     #print('args', args)
 
     cfg = Config.fromfile(args.config)
+
+    if args.slurm_id != -1:
+        lr_list = [1, 0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001]
+        args.learning_rate = lr_list[args.slurm_id]
+
     
     # override args from the command line
     for k, v in vars(args).items():
@@ -140,7 +148,8 @@ if __name__ == "__main__":
 
     assert_args(args)
 
-    #print('args after', args)
+    print('args after', args)
+    print('cfg after', cfg)
 
     run_types = {"benchmark": benchmark, "meta-train": meta_train, "sweep": sweep}
 
