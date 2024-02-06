@@ -159,6 +159,7 @@ def meta_train(args):
         project="learned_aggregation_meta_train",
         group=args.meta_train_name,
         config=vars(args),
+        mode="offline"
     )
 
     iteration = int(

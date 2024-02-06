@@ -42,7 +42,7 @@ set -x
 delay=${1}
 
 python src/main.py \
-    --config config/meta_test/image-mlp-fmst_adam.py\
+    --config config/meta_test/image-mlp-fmst_sgd.py\
     --tfds_data_dir $STORE/tf_datasets\
     --wandb_dir $STORE/jax_wandb\
     --delay_optim_test\

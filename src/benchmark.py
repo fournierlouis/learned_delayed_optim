@@ -33,7 +33,7 @@ def benchmark(args):
                     'label':'label'}
 
     for _ in tqdm(range(args.num_runs), ascii=True, desc="Outer Loop"):
-        run = wandb.init(project=args.test_project, group=args.name, config=vars(args))
+        run = wandb.init(project=args.test_project, group=args.name, config=vars(args), mode="offline")
 
         key, key1 = jax.random.split(key)
         if args.needs_state:
@@ -102,7 +102,7 @@ def sweep(args):
         key = jax.random.PRNGKey(0)
 
         run = wandb.init(
-            project="learned_aggregation_meta_test", group=args.name, config=vars(args)
+            project="learned_aggregation_meta_test", group=args.name, config=vars(args), mode="offline"
         )
         args = argparse.Namespace(**run.config)
 
