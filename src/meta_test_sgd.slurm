@@ -31,10 +31,11 @@ module purge
 
 cd /gpfswork/rech/bao/unl88dr/learned_delayed_optim/
 
-source env/bin/activate
 
+source venv/bin/activate
 module load cpuarch/amd
 module load cudnn/8.9.7.29-cuda
+module load python/3.9.12
 wandb offline
 
 set -x
