@@ -487,7 +487,7 @@ def wide16_imagenet_8(batch_size):
 #     resnet18 = {
 #           "blocks_per_group": (2, 2, 2, 2),
 #         #   "bottleneck": False,
-#           "initial_conv_channels":64,
+#           "initial_conv_channels":64,  
 #           "initial_conv_stride":2,
 #           "initial_conv_kernel_size":7,
 #         #   "blocks_per_group":,
@@ -581,7 +581,7 @@ def deit_small_imagenet_64(batch_size):
 
 
 
-# study generalization to width, depth, and larger images
+# study generalization to width, depth, and larger images 
 
 @gin.configurable
 def mlp128_pow6_imagenet_32(batch_size):
