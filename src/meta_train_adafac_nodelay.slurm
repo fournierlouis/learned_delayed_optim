@@ -31,13 +31,16 @@ cd /gpfswork/rech/bao/unl88dr/learned_delayed_optim/
 source venv/bin/activate
 module load cpuarch/amd
 module load cudnn/8.9.7.29-cuda
-module load python/3.9.12
+module load python/3.8.2
 wandb offline
+
 set -x
 
 
-TFDS_DATA_DIR=$STORE/tf_datasets WANDB_DIR=$STORE/jax_wandb python src/main.py \
+python3.8 src/main.py \
     --config config/meta_train/meta_train_adafac32_image-mlp-fmst_schedule_3e-3_10000_d3.py \
     --num_local_steps 4 \
     --num_grads 8 \
-    --local_learning_rate 0.5
+    --local_learning_rate 0.5 \
+    --tfds_data_dir $STORE/tf_datasets \
+    --wandb_dir $STORE/jax_wandb
