@@ -31,17 +31,17 @@ module purge
 
 cd /gpfswork/rech/bao/unl88dr/learned_delayed_optim/
 
-source venv/bin/activate
 module load cpuarch/amd
 module load cudnn/8.9.7.29-cuda
-module load python/3.8.2
+module load python/3.9.12
+source venv/bin/activate
 wandb offline
 
 set -x
 
 delay=${1}
 
-python3.8 src/main.py \
+python3.9 src/main.py \
     --config config/meta_test/image-mlp-fmst_sgd.py\
     --tfds_data_dir $STORE/tf_datasets\
     --wandb_dir $STORE/jax_wandb\
