@@ -60,7 +60,7 @@ class DelayAdafacMLPLOptState:
   num_steps: jnp.ndarray
   iteration: jnp.ndarray
   delayed_gradients_acc: DelayedGradientsAccumulator
-  delayed_param_acc: DelayedGradientsAccumulator
+  #delayed_param_acc: DelayedGradientsAccumulator
 
 @gin.configurable
 class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
