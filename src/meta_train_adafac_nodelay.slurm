@@ -19,7 +19,7 @@
 #SBATCH --cpus-per-task=8           # number of cores per task for gpu_p5 (1/8 of 8-GPUs node)
 # /!\ Caution, "multithread" in Slurm vocabulary refers to hyperthreading.
 #SBATCH --hint=nomultithread         # hyperthreading is deactivated
-#SBATCH --time=20:00:00               # maximum execution time requested (HH:MM:SS)
+#SBATCH --time=12:00:00               # maximum execution time requested (HH:MM:SS)
 #SBATCH --output=gpu_adafac_nod_meta%j.out    # name of output file
 #SBATCH --error=gpu_adafac_nod_meta%j.out     # name of error file (here, in common with the output file)
 
