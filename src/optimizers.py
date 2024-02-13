@@ -7,6 +7,11 @@ from haiku._src.data_structures import FlatMap
 from learned_optimization import tree_utils
 from learned_optimization.optimizers import base as opt_base
 from learned_optimization.optimizers import optax_opts, OptaxOptimizer
+from learned_optimization.learned_optimizers.adafac_mlp_lopt import AdafacMLPLOpt
+from learned_optimization.learned_optimizers.mlp_lopt import MLPLOpt
+
+from delay_adafac_mlp_lopt import DelayAdafacMLPLOpt
+from delay_mlp_lopt import DelayMLPLOpt
 
 from fed_adafac_mlp_lopt import FedAdafacMLPLOpt
 from fed_mlp_lopt import FedMLPLOpt
@@ -293,6 +298,73 @@ def _fedlagg(args):
     return agg, update
 
 
+def _delay(args):
+    if args.optimizer in ["adafac"]:
+        opt = AdafacMLPLOpt(
+            hidden_size=args.hidden_size,
+        )
+    elif args.optimizer in ["delay-adafac"]:
+        opt = DelayAdafacMLPLOpt(
+            hidden_size=args.hidden_size,
+            delay=args.delay,
+            delay_features=args.delay_features
+        )
+    elif args.optimizer in ["mlp"]:
+        opt = MLPLOpt(
+            hidden_size=args.hidden_size,
+        )
+    elif args.optimizer in ["delay-mlp"]:
+        opt = DelayMLPLOpt(
+            hidden_size=args.hidden_size,
+            delay=args.delay,
+            delay_features=args.delay_features
+        )
+
+    task = get_task(args)
+
+    do_delay = args.delay_optim_test
+
+    @jax.jit
+    def update_nodelay(opt_state, key, batch):
+        params = opt.get_params(opt_state)
+
+        if args.needs_state:
+            state = opt.get_state(opt_state)
+            (l, s), grad = jax.value_and_grad(task.loss_with_state, has_aux=True)(params, state, key, batch)
+        else:
+            l, grad = jax.value_and_grad(task.loss)(params, key, batch)
+            s = None
+
+        return opt.update(opt_state, grad, loss=l, model_state=s), l
+
+    @jax.jit
+    def update_delay(opt_state, key, batch, delayed_gradients_state):
+        params = opt.get_params(opt_state)
+
+        if args.needs_state:
+            state = opt.get_state(opt_state)
+            (l, s), grad = jax.value_and_grad(task.loss_with_state, has_aux=True)(params, state, key, batch)
+        else:
+            l, grad = jax.value_and_grad(task.loss)(params, key, batch)
+            s = None
+
+        new_dg_state, grad = delayed_gradients(args.delay).update(delayed_gradients_state, grad)
+
+        delayed_gradients_state = tree_utils.match_type(new_dg_state,
+                                                        delayed_gradients_state)
+
+        return jax.lax.cond(delayed_gradients_state.update,
+                            lambda o, g, l, s, d: (opt.update(o, g, loss=l, model_state=s), l, d),
+                            lambda o, g, l, s, d: (o, l, d),
+                            opt_state, grad, l, s, delayed_gradients_state)
+
+    if do_delay:
+        update = update_delay
+    else:
+        update = update_nodelay
+
+    return opt, update
+
 def _fedavg(args):
     opt = optax_opts.SGD(learning_rate=args.local_learning_rate)
 
@@ -395,14 +467,14 @@ def _fedavg_slowmo(args):
 
             for sub_client_batch in s_c_batch:
                 params = opt.get_params(local_opt_state)
-                
+
                 if args.needs_state:
                     state = opt.get_state(local_opt_state)
                     (l, s), grad = jax.value_and_grad(task.loss_with_state, has_aux=True)(params, state, key, sub_client_batch)
                 else:
                     l, grad = jax.value_and_grad(task.loss)(params, key, sub_client_batch)
                     s = None
-                
+
                 losses.append(l)
                 local_opt_state = opt.update(local_opt_state, grad, loss=l, model_state=s)
 
@@ -470,6 +542,11 @@ def get_optimizer(args):
         "fedlagg": _fedlagg,
         "fedlagg-wavg": _fedlagg,
         "fedlagg-adafac": _fedlagg,
+
+        "adafac": _delay_trainer,
+        "delay-adafac": _delay_trainer,
+        "mlp": _delay_trainer,
+        "delay-mlp": _delay_meta_trainer
     }
 
     return optimizers[args.optimizer](args)  # TODO Find better way to do this

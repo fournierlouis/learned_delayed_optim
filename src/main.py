@@ -63,6 +63,7 @@ def parse_args():
 
     parser.add_argument("--delay", type=int, default=4)
     parser.add_argument("--delay_optim_test", action="store_true")
+    parser.add_argument("--delay_features", type=int, default=0) #Using additional specific delay features
 
     parser.add_argument("--slurm_id", type=int, default=-1)
 

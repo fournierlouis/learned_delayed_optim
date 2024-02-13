@@ -235,6 +235,10 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     batch_dp = jnp.expand_dims(abs_diff, axis=-1)
                     inps.append(batch_dp)
 
+                    inps.append(jnp.dot(diff, g))
+
+                    norm = jnp.mean(jnp.square(diff), keepdims=True)
+                    inps.append(norm)
 
                     # feature consisting of raw parameter values
                     batch_p = jnp.expand_dims(p, axis=-1)
@@ -243,6 +247,10 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     # feature consisting of all momentum values
                     inps.append(m)
 
+
+                    # feature consisting of all momentum values reciprocal also
+                    inps.append(jax.lax.reciprocal(1e-8 + m))
+
                     inp_stack = jnp.concatenate(inps, axis=-1)
                     axis = list(range(len(p.shape)))
 
@@ -250,6 +258,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     # once normalized, add features that are constant across tensor.
                     # namly the training step embedding.
+
                     stacked = jnp.reshape(training_step_feature, [1] * len(axis) +
                                           list(training_step_feature.shape[-1:]))
                     stacked = jnp.tile(stacked, list(p.shape) + [1])
@@ -365,8 +374,17 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     return new_p
 
-                next_params = jax.tree_util.tree_map(_update_tensor, opt_state.params,
+                if delay_features:
+                    upd_fn = _update_tensor_delay_features
+                else:
+                    upd_fn = _update_tensor
+
+                next_params = jax.tree_util.tree_map(upd_fn, opt_state.params,
                                                      grad, next_rolling_features.m)
+
+                #next_params = jax.tree_util.tree_map(_update_tensor, opt_state.params,
+                #                                     grad, next_rolling_features.m)
+
                 next_opt_state = DelayMLPLOptState(
                     params=tree_utils.match_type(next_params, opt_state.params),
                     rolling_features=tree_utils.match_type(next_rolling_features,
