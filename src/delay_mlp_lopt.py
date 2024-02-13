@@ -120,7 +120,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     rolling_features=common.vec_rolling_mom(decays).init(params),
                     iteration=jnp.asarray(0, dtype=jnp.int32),
                     delayed_gradients_acc=delayed_gradients(delay).init(params),
-                    delayed_param_acc=delayed_gradients(delay).init(params) if delay_features > 0 else None)
+                    delayed_param_acc=delayed_gradients(delay).init(params)) # if delay_features > 0 else None)
 
             def update_false(
                     self,
@@ -142,7 +142,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     iteration=opt_state.iteration + 1,
                     state=model_state,
                     delayed_gradients_acc=delayed_gradients_acc,
-                    delayed_param_acc=delayed_params_acc if delay_features > 0 else None
+                    delayed_param_acc=delayed_params_acc # if delay_features > 0 else None
                 )
                 return tree_utils.match_type(next_opt_state, opt_state)
 
@@ -162,11 +162,22 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 next_delayed_gradients, old_grads = delayed_gradients(delay).update(opt_state.delayed_gradients_acc,
                                                                                    grads)
 
-                if delay_features > 0:
-                    next_delayed_param, old_params = delayed_gradients(delay).update(opt_state.delayed_param_acc,
-                                                                                       opt_state.params)
-                else:
-                    next_delayed_param, old_params = None, None
+                #if delay_features > 0:
+
+                def update_delayed_params_true(d_p_a, p):
+                    return(delayed_gradients(delay).update(d_p_a, p))
+
+                def update_delayed_params_false(d_p_a, p):
+                    return(None, None)
+
+                next_delayed_param, old_params = jax.cond(delay_features>0,
+                                                          update_delayed_params_true, update_delayed_params_false,
+                                                          opt_state.delayed_param_acc, opt_state.params)
+
+                #next_delayed_param, old_params = delayed_gradients(delay).update(opt_state.delayed_param_acc,
+                #                                                                       opt_state.params)
+                #else:
+                #    next_delayed_param, old_params = None, None
 
                 #jax.debug.print('4 o grad {g}', g=old_grads)
                 #jax.debug.print(' 5 new state {s}', s = next_delayed_gradients)
@@ -374,16 +385,23 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     return new_p
 
-                if delay_features:
-                    upd_fn = _update_tensor_delay_features
-                    jax.debug.print("using delayed feat")
-                else:
-                    upd_fn = _update_tensor
+
+                def tree_upd(p,g,m):
+                    jax.debug.print("#  using NOT delayed feat")
+                    return(jax.tree_util.tree_map(_update_tensor, opt_state.params,
+                                                     grad, next_rolling_features.m))
+
+                def tree_upd_delay(p,g,m):
+                    jax.debug.print("#  using delayed feat")
+                    return(jax.tree_util.tree_map(_update_tensor_delay_features, opt_state.params,
+                                                     grad, next_rolling_features.m))
 
 
+                #jax.debug.print("using delayed feat")
 
-                next_params = jax.tree_util.tree_map(upd_fn, opt_state.params,
-                                                     grad, next_rolling_features.m)
+                next_params = jax.cond(delay_features>0,
+                                       tree_upd_delay, tree_upd,
+                                       opt_state.params, grad, next_rolling_features.m)
 
                 #next_params = jax.tree_util.tree_map(_update_tensor, opt_state.params,
                 #                                     grad, next_rolling_features.m)
@@ -395,7 +413,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     iteration=opt_state.iteration + 1,
                     state=model_state,
                     delayed_gradients_acc=delayed_gradients_acc,
-                    delayed_param_acc=delayed_params_acc if delay_features > 0 else None)
+                    delayed_param_acc=delayed_params_acc) # if delay_features > 0 else None)
                 return next_opt_state
 
         return _Opt(self.num_grads, self._with_all_grads, self._with_avg)
