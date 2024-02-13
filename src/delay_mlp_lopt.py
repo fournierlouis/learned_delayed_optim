@@ -312,7 +312,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                         summary.summary("mlp_lopt/grad/mean_abs", jnp.mean(jnp.abs(g)))
 
                     return new_p
-                def _update_tensor(p, g, m):
+                def _update_tensor(p, g, m, o_p):
                     # this doesn't work with scalar parameters, so let's reshape.
                     if not p.shape:
                         p = jnp.expand_dims(p, 0)
@@ -386,22 +386,22 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     return new_p
 
 
-                def tree_upd(p,g,m):
+                def tree_upd(p, g, m, o_p):
                     jax.debug.print("#  using NOT delayed feat")
-                    return(jax.tree_util.tree_map(_update_tensor, p,
-                                                     g, m))
+                    return(jax.tree_util.tree_map(_update_tensor,
+                                                  p, g, m, o_p))
 
-                def tree_upd_delay(p,g,m):
+                def tree_upd_delay(p, g, m, o_p):
                     jax.debug.print("#  using delayed feat")
-                    return(jax.tree_util.tree_map(_update_tensor_delay_features, p,
-                                                     g, m))
+                    return(jax.tree_util.tree_map(_update_tensor_delay_features,
+                                                  p, g, m, o_p))
 
 
                 #jax.debug.print("using delayed feat")
 
                 next_params = jax.lax.cond(delay_features>0,
                                        tree_upd_delay, tree_upd,
-                                       opt_state.params, grad, next_rolling_features.m)
+                                       opt_state.params, grad, next_rolling_features.m, old_params)
 
                 #next_params = jax.tree_util.tree_map(_update_tensor, opt_state.params,
                 #                                     grad, next_rolling_features.m)
