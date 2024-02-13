@@ -86,6 +86,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         num_features = jax.lax.cond(self._delay_features>0, return_features_more, return_features_normal)
 
         print(num_features, "nb")
+        print(self._delay_features, "nb FEAUT")
 
         #if self._delay_features > 0:
         #    num_features = 29
