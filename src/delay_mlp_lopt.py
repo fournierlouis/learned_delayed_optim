@@ -247,7 +247,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     batch_dp = jnp.expand_dims(abs_diff, axis=-1)
                     inps.append(batch_dp)
 
-                    inps.append(jnp.einsum('i...,i...->i', diff, g))
+                    inps.append(jnp.expand_dims(jnp.einsum('i...,i...->i', diff, g), axis=-1))
 
                     norm = jnp.expand_dims(jnp.mean(jnp.square(diff), axis=tuple(range(1, diff.ndim))), axis=-1)
                     inps.append(norm)
