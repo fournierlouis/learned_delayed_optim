@@ -249,7 +249,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     inps.append(jnp.einsum('i...,i...->i', diff, g))
 
-                    norm = jnp.mean(jnp.square(diff), axis=tuple(range(1, diff.ndim)))
+                    norm = jnp.expand_dims(jnp.mean(jnp.square(diff), axis=tuple(range(1, diff.ndim))), axis=-1)
                     inps.append(norm)
 
                     # feature consisting of raw parameter values
