@@ -78,7 +78,10 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
     def init(self, key: PRNGKey) -> lopt_base.MetaParams:
         # There are 19 features used as input. For now, hard code this.
-        num_features = 19 # - 1 - 6  # -1 for gradient, -6 for momentum features
+        if self._delay_features > 0:
+            num_features = 29
+        else:
+            num_features = 19 # - 1 - 6  # -1 for gradient, -6 for momentum features
         #if self._with_all_grads:
         #    num_features += self.num_grads
         #if self._with_avg:
