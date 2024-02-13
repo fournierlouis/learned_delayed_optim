@@ -238,6 +238,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     # feature consisting of raw difference of parameters values
                     diff = p - o_p
+
+                    jax.debug.print("shapes {a} {b}", a=diff.shape, b=g.shape)
                     batch_dp = jnp.expand_dims(diff, axis=-1)
                     inps.append(batch_dp)
 
@@ -246,7 +248,6 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     batch_dp = jnp.expand_dims(abs_diff, axis=-1)
                     inps.append(batch_dp)
 
-                    jax.debug.print("shapes {a} {b}", a=diff.shape, b=g.shape)
                     inps.append(jnp.einsum('ij,ij->i', diff, g))
 
                     norm = jnp.mean(jnp.square(diff), axis=1)
