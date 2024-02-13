@@ -388,13 +388,13 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                 def tree_upd(p,g,m):
                     jax.debug.print("#  using NOT delayed feat")
-                    return(jax.tree_util.tree_map(_update_tensor, opt_state.params,
-                                                     grad, next_rolling_features.m))
+                    return(jax.tree_util.tree_map(_update_tensor, p,
+                                                     g, m))
 
                 def tree_upd_delay(p,g,m):
                     jax.debug.print("#  using delayed feat")
-                    return(jax.tree_util.tree_map(_update_tensor_delay_features, opt_state.params,
-                                                     grad, next_rolling_features.m))
+                    return(jax.tree_util.tree_map(_update_tensor_delay_features, p,
+                                                     g, m))
 
 
                 #jax.debug.print("using delayed feat")
