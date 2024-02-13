@@ -168,7 +168,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     return(delayed_gradients(delay).update(d_p_a, p))
 
                 def update_delayed_params_false(d_p_a, p):
-                    return(None, None)
+                    return(d_p_a, p)
 
                 next_delayed_param, old_params = jax.lax.cond(delay_features>0,
                                                           update_delayed_params_true, update_delayed_params_false,
