@@ -280,7 +280,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
 
 
-                    dot_feat = jnp.inner(diff, g)
+                    dot_feat = jnp.einsum('...,...->',diff,g)
                     stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +
                                           list(dot_feat.shape[-1:]))
                     stacked_dot = jnp.tile(stacked_dot, list(p.shape) + [1])
