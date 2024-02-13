@@ -376,8 +376,11 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                 if delay_features:
                     upd_fn = _update_tensor_delay_features
+                    jax.debug.print("using delayed feat")
                 else:
                     upd_fn = _update_tensor
+
+
 
                 next_params = jax.tree_util.tree_map(upd_fn, opt_state.params,
                                                      grad, next_rolling_features.m)
