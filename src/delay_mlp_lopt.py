@@ -240,6 +240,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     diff = p - o_p
 
                     jax.debug.print("shapes {a} {b}", a=diff.shape, b=g.shape)
+                    print("shapes {a} {b}", a=diff.shape, b=g.shape)
                     batch_dp = jnp.expand_dims(diff, axis=-1)
                     inps.append(batch_dp)
 
