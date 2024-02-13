@@ -170,7 +170,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 def update_delayed_params_false(d_p_a, p):
                     return(None, None)
 
-                next_delayed_param, old_params = jax.cond(delay_features>0,
+                next_delayed_param, old_params = jax.lax.cond(delay_features>0,
                                                           update_delayed_params_true, update_delayed_params_false,
                                                           opt_state.delayed_param_acc, opt_state.params)
 
@@ -399,7 +399,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                 #jax.debug.print("using delayed feat")
 
-                next_params = jax.cond(delay_features>0,
+                next_params = jax.lax.cond(delay_features>0,
                                        tree_upd_delay, tree_upd,
                                        opt_state.params, grad, next_rolling_features.m)
 
