@@ -85,8 +85,6 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
         num_features = jax.lax.cond(self._delay_features>0, return_features_more, return_features_normal)
 
-        print(num_features, "nb")
-        print(self._delay_features, "nb FEAUT")
 
         #if self._delay_features > 0:
         #    num_features = 29
@@ -260,10 +258,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     batch_dp = jnp.expand_dims(abs_diff, axis=-1)
                     inps.append(batch_dp)
 
-                    inps.append(jnp.expand_dims(jnp.einsum('i...,i...->i', diff, g), axis=-1))
 
-                    norm = jnp.expand_dims(jnp.mean(jnp.square(diff), axis=tuple(range(1, diff.ndim))), axis=-1)
-                    inps.append(norm)
 
                     # feature consisting of raw parameter values
                     batch_p = jnp.expand_dims(p, axis=-1)
@@ -281,6 +276,21 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     inp_stack = _second_moment_normalizer(inp_stack, axis=axis)
 
+
+
+
+
+                    dot_feat = jnp.dot(diff, g)
+                    stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +
+                                          list(dot_feat.shape[-1:]))
+                    stacked_dot = jnp.tile(stacked_dot, list(p.shape) + [1])
+
+                    norm = jnp.sum(jnp.mean(jnp.square(diff)))
+
+                    stacked_norm = jnp.reshape(training_step_feature, [1] * len(axis) +
+                                          list(training_step_feature.shape[-1:]))
+                    stacked_norm = jnp.tile(stacked_norm, list(p.shape) + [1])
+
                     # once normalized, add features that are constant across tensor.
                     # namly the training step embedding.
 
@@ -288,7 +298,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                                           list(training_step_feature.shape[-1:]))
                     stacked = jnp.tile(stacked, list(p.shape) + [1])
 
-                    inp = jnp.concatenate([inp_stack, stacked], axis=-1)
+                    inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
 
                     # apply the per parameter MLP.
                     output = mod.apply(theta, inp)
