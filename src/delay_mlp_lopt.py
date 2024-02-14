@@ -81,7 +81,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         def return_features_normal():
             return(19)
         def return_features_more():
-            return(39)
+            return(19)
 
         num_features = jax.lax.cond(self._delay_features>0, return_features_more, return_features_normal)
 
@@ -276,10 +276,6 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     inp_stack = _second_moment_normalizer(inp_stack, axis=axis)
 
-
-
-
-
                     dot_feat = jnp.einsum('...,...->',diff,g)
                     stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +
                                           list(dot_feat.shape[-1:]))
@@ -287,8 +283,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     norm = jnp.sum(jnp.mean(jnp.square(diff)))
 
-                    stacked_norm = jnp.reshape(training_step_feature, [1] * len(axis) +
-                                          list(training_step_feature.shape[-1:]))
+                    stacked_norm = jnp.reshape(norm, [1] * len(axis) +
+                                          list(norm.shape[-1:]))
                     stacked_norm = jnp.tile(stacked_norm, list(p.shape) + [1])
 
                     # once normalized, add features that are constant across tensor.
