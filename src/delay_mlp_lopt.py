@@ -121,6 +121,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 self._with_all_grads = with_all_grads
                 self._with_avg = with_avg
                 self.delay_features = delay_features
+                print('SELF', self.delay_features)
 
             def init(
                 self,
