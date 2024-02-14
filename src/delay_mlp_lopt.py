@@ -81,7 +81,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         def return_features_normal():
             return(19)
         def return_features_more():
-            return(19)
+            return(29)
 
         num_features = jax.lax.cond(self._delay_features>0, return_features_more, return_features_normal)
 
