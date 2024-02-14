@@ -301,6 +301,10 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
 
+                    print('shape', inp.shape)
+                    print('theta', theta)
+                    print('ts', theta.shape)
+
                     # apply the per parameter MLP.
                     output = mod.apply(theta, inp)
 
