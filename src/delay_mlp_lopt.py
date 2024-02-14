@@ -120,6 +120,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 self.num_grads = num_grads
                 self._with_all_grads = with_all_grads
                 self._with_avg = with_avg
+                self.delay_features = delay_features
 
             def init(
                 self,
@@ -427,7 +428,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                 #jax.debug.print("using delayed feat")
 
-                next_params = jax.lax.cond(delay_features>0,
+                next_params = jax.lax.cond(self.delay_features>0,
                                        tree_upd_delay, tree_upd,
                                        opt_state.params, grad, next_rolling_features.m, old_params)
 
