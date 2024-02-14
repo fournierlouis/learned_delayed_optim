@@ -71,13 +71,13 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         self._delay = delay
         self._delay_features = delay_features
 
-        print(hidden_size, hidden_layers, "HIDDEN")
-        print("in", [hidden_size] * hidden_layers + [2])
+        #print(hidden_size, hidden_layers, "HIDDEN")
+        #print("in", [hidden_size] * hidden_layers + [2])
 
         def ff_mod(inp):
             return hk.nets.MLP([hidden_size] * hidden_layers + [2])(inp)
 
-        print(ff_mod, "ffmod")
+        #print(ff_mod, "ffmod")
 
         self._mod = hk.without_apply_rng(hk.transform(ff_mod))
 
@@ -90,7 +90,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
         num_features = jax.lax.cond(self._delay_features>0, return_features_more, return_features_normal)
 
-        print('nb feat', num_features)
+        #print('nb feat', num_features)
         #if self._delay_features > 0:
         #    num_features = 29
         #else:
@@ -121,7 +121,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 self._with_all_grads = with_all_grads
                 self._with_avg = with_avg
                 self.delay_features = delay_features
-                print('SELF', self.delay_features)
+                #print('SELF', self.delay_features)
 
             def init(
                 self,
@@ -303,8 +303,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
 
-                    print('shape', inp.shape)
-                    print('theta', theta)
+                    #print('shape', inp.shape)
+                    #print('theta', theta)
 
                     # apply the per parameter MLP.
                     output = mod.apply(theta, inp)
@@ -417,17 +417,17 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
 
                 def tree_upd(p, g, m, o_p):
-                    jax.debug.print("#  using NOT delayed feat")
+                    #jax.debug.print("#  using NOT delayed feat")
                     return(jax.tree_util.tree_map(_update_tensor,
                                                   p, g, m, o_p))
 
                 def tree_upd_delay(p, g, m, o_p):
-                    jax.debug.print("#  using delayed feat")
+                    #jax.debug.print("#  using delayed feat")
                     return(jax.tree_util.tree_map(_update_tensor_delay_features,
                                                   p, g, m, o_p))
 
-                print('delayed?', self.delay_features)
-                jax.debug.print("using delayed feat? {s}", s=self.delay_features)
+                #print('delayed?', self.delay_features)
+                #jax.debug.print("using delayed feat? {s}", s=self.delay_features)
 
                 next_params = jax.lax.cond(self.delay_features>0,
                                        tree_upd_delay, tree_upd,
