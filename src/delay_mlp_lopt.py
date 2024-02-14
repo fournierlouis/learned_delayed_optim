@@ -71,8 +71,13 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         self._delay = delay
         self._delay_features = delay_features
 
+        print(hidden_size, hidden_layers, "HIDDEN")
+        print("in", [hidden_size] * hidden_layers + [2])
+
         def ff_mod(inp):
             return hk.nets.MLP([hidden_size] * hidden_layers + [2])(inp)
+
+        print(ff_mod, "ffmod")
 
         self._mod = hk.without_apply_rng(hk.transform(ff_mod))
 
@@ -81,11 +86,11 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         def return_features_normal():
             return(19)
         def return_features_more():
-            return(19)
+            return(29)
 
         num_features = jax.lax.cond(self._delay_features>0, return_features_more, return_features_normal)
 
-
+        print('nb feat', num_features)
         #if self._delay_features > 0:
         #    num_features = 29
         #else:
