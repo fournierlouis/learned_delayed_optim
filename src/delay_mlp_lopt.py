@@ -330,9 +330,16 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     else:
                         did_reshape = False
 
-                    inp = jax.lax.cond(self.delay_features>0,
-                                       features_withdelay, features_normal,
-                                       p, g, m, o_p)
+                    if self.delay_features > 0:
+                        inp = features_withdelay(p,g,m,o_p)
+                    else:
+                        inp = features_normal(p,g,m,o_p)
+
+                    #inp = jax.lax.cond(self.delay_features>0,
+                    ##                   features_withdelay, features_normal,
+                    #                   p, g, m, o_p)
+
+
 
                     # apply the per parameter MLP.
                     output = mod.apply(theta, inp)
