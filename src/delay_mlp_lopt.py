@@ -111,7 +111,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         step_mult = self._step_mult
         compute_summary = self._compute_summary
         delay = self._delay
-        delay_features =self._delay_features
+        delay_features = self._delay_features
 
         class _Opt(opt_base.Optimizer):
             """Optimizer instance which has captured the meta-params (theta)."""
@@ -121,7 +121,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 self._with_all_grads = with_all_grads
                 self._with_avg = with_avg
                 self.delay_features = delay_features
-                #print('SELF', self.delay_features)
+                print("delayfeat", self.delay_features)
 
             def init(
                 self,
@@ -416,12 +416,16 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     return new_p
 
 
+                print("delayfeat AGAIN", self.delay_features)
+
                 def tree_upd(p, g, m, o_p):
+                    print('up1')
                     #jax.debug.print("#  using NOT delayed feat")
                     return(jax.tree_util.tree_map(_update_tensor,
                                                   p, g, m, o_p))
 
                 def tree_upd_delay(p, g, m, o_p):
+                    print('up2')
                     #jax.debug.print("#  using delayed feat")
                     return(jax.tree_util.tree_map(_update_tensor_delay_features,
                                                   p, g, m, o_p))
@@ -429,6 +433,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 #print('delayed?', self.delay_features)
                 #jax.debug.print("using delayed feat? {s}", s=self.delay_features)
 
+                print("delayfeat TEST", self.delay_features>0)
                 next_params = jax.lax.cond(self.delay_features>0,
                                        tree_upd_delay, tree_upd,
                                        opt_state.params, grad, next_rolling_features.m, old_params)
