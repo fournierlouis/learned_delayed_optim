@@ -303,7 +303,6 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     print('shape', inp.shape)
                     print('theta', theta)
-                    print('ts', theta.shape)
 
                     # apply the per parameter MLP.
                     output = mod.apply(theta, inp)
