@@ -237,19 +237,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     # append(momentum of (p-old_p) ? )
                     #features.append()
 
-                def _update_tensor_delay_features(p, g, m, o_p):
-                    # this doesn't work with scalar parameters, so let's reshape.
-                    if not p.shape:
-                        p = jnp.expand_dims(p, 0)
-                        g = jnp.expand_dims(g, 0)
-                        m = jnp.expand_dims(m, 0)
-                        o_p = jnp.expand_dims(o_p, 0)
-                        did_reshape = True
-                    else:
-                        did_reshape = False
-
+                def features_withdelay(p, g, m, o_p):
                     inps = []
-
                     # feature consisting of raw gradient values
                     batch_g = jnp.expand_dims(g, axis=-1)
                     inps.append(batch_g)
@@ -265,15 +254,12 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     batch_dp = jnp.expand_dims(abs_diff, axis=-1)
                     inps.append(batch_dp)
 
-
-
                     # feature consisting of raw parameter values
                     batch_p = jnp.expand_dims(p, axis=-1)
                     inps.append(batch_p)
 
                     # feature consisting of all momentum values
                     inps.append(m)
-
 
                     # feature consisting of all momentum values reciprocal also
                     inps.append(jax.lax.reciprocal(1e-8 + m))
@@ -283,15 +269,15 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     inp_stack = _second_moment_normalizer(inp_stack, axis=axis)
 
-                    dot_feat = jnp.einsum('...,...->',diff,g)
+                    dot_feat = jnp.einsum('...,...->', diff, g)
                     stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +
-                                          list(dot_feat.shape[-1:]))
+                                              list(dot_feat.shape[-1:]))
                     stacked_dot = jnp.tile(stacked_dot, list(p.shape) + [1])
 
                     norm = jnp.sum(jnp.mean(jnp.square(diff)))
 
                     stacked_norm = jnp.reshape(norm, [1] * len(axis) +
-                                          list(norm.shape[-1:]))
+                                               list(norm.shape[-1:]))
                     stacked_norm = jnp.tile(stacked_norm, list(p.shape) + [1])
 
                     # once normalized, add features that are constant across tensor.
@@ -303,55 +289,9 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
 
-                    #print('shape', inp.shape)
-                    #print('theta', theta)
+                    return (inp)
 
-                    # apply the per parameter MLP.
-                    output = mod.apply(theta, inp)
-
-                    # split the 2 outputs up into a direction and a magnitude
-                    direction = output[..., 0]
-                    magnitude = output[..., 1]
-
-                    # compute the step
-                    step = direction * jnp.exp(magnitude * exp_mult) * step_mult
-                    step = step.reshape(p.shape)
-                    new_p = p - step
-                    if did_reshape:
-                        new_p = jnp.squeeze(new_p, 0)
-
-                    if compute_summary:
-                        for fi, f in enumerate(inp):
-                            summary.summary(f"mlp_lopt/inp{fi}/mean_abs",
-                                            jnp.mean(jnp.abs(f)))
-
-                        avg_step_size = jnp.mean(jnp.abs(step))
-                        summary.summary("mlp_lopt/avg_step_size", avg_step_size)
-
-                        summary.summary(
-                            "mlp_lopt/avg_step_size_hist",
-                            avg_step_size,
-                            aggregation="collect")
-
-                        summary.summary("mlp_lopt/direction/mean_abs",
-                                        jnp.mean(jnp.abs(direction)))
-                        summary.summary("mlp_lopt/magnitude/mean_abs",
-                                        jnp.mean(jnp.abs(magnitude)))
-                        summary.summary("mlp_lopt/magnitude/mean", jnp.mean(magnitude))
-
-                        summary.summary("mlp_lopt/grad/mean_abs", jnp.mean(jnp.abs(g)))
-
-                    return new_p
-                def _update_tensor(p, g, m, o_p):
-                    # this doesn't work with scalar parameters, so let's reshape.
-                    if not p.shape:
-                        p = jnp.expand_dims(p, 0)
-                        g = jnp.expand_dims(g, 0)
-                        m = jnp.expand_dims(m, 0)
-                        did_reshape = True
-                    else:
-                        did_reshape = False
-
+                def features_normal(p, g, m, o_p):
                     inps = []
 
                     # feature consisting of raw gradient values
@@ -378,6 +318,22 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     inp = jnp.concatenate([inp_stack, stacked], axis=-1)
 
+                    return (inp)
+
+                def _update_tensor(p, g, m, o_p):
+                    # this doesn't work with scalar parameters, so let's reshape.
+                    if not p.shape:
+                        p = jnp.expand_dims(p, 0)
+                        g = jnp.expand_dims(g, 0)
+                        m = jnp.expand_dims(m, 0)
+                        did_reshape = True
+                    else:
+                        did_reshape = False
+
+                    inp = jax.lax.cond(self.delay_features>0,
+                                       features_withdelay, features_normal,
+                                       p, g, m, o_p)
+
                     # apply the per parameter MLP.
                     output = mod.apply(theta, inp)
 
@@ -416,26 +372,12 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     return new_p
 
 
-                print("delayfeat AGAIN", self.delay_features)
 
-                def tree_upd(p, g, m, o_p):
-                    print('up1')
-                    #jax.debug.print("#  using NOT delayed feat")
-                    return(jax.tree_util.tree_map(_update_tensor,
-                                                  p, g, m, o_p))
-
-                def tree_upd_delay(p, g, m, o_p):
-                    print('up2')
-                    #jax.debug.print("#  using delayed feat")
-                    return(jax.tree_util.tree_map(_update_tensor_delay_features,
-                                                  p, g, m, o_p))
 
                 #print('delayed?', self.delay_features)
                 #jax.debug.print("using delayed feat? {s}", s=self.delay_features)
 
-                print("delayfeat TEST", self.delay_features>0)
-                next_params = jax.lax.cond(self.delay_features>0,
-                                       tree_upd_delay, tree_upd,
+                next_params = jax.tree_util.tree_map(_update_tensor,
                                        opt_state.params, grad, next_rolling_features.m, old_params)
 
                 #next_params = jax.tree_util.tree_map(_update_tensor, opt_state.params,
