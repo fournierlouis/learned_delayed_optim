@@ -71,13 +71,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         self._delay = delay
         self._delay_features = delay_features
 
-        #print(hidden_size, hidden_layers, "HIDDEN")
-        #print("in", [hidden_size] * hidden_layers + [2])
-
         def ff_mod(inp):
             return hk.nets.MLP([hidden_size] * hidden_layers + [2])(inp)
-
-        #print(ff_mod, "ffmod")
 
         self._mod = hk.without_apply_rng(hk.transform(ff_mod))
 

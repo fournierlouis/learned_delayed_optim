@@ -60,6 +60,7 @@ class DelayAdafacMLPLOptState:
   num_steps: jnp.ndarray
   iteration: jnp.ndarray
   delayed_gradients_acc: DelayedGradientsAccumulator
+  delayed_param_acc: Any
   #delayed_param_acc: DelayedGradientsAccumulator
 
 @gin.configurable
@@ -77,7 +78,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
                concat_weights=True,
                make_separate_weights=False,
                split_weights=False,
-               delay=0):
+               delay=0,
+               delay_features=0):
     super().__init__()
     self._exp_mult = exp_mult
     self._step_mult = step_mult
@@ -90,11 +92,12 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
     self._make_separate_weights = make_separate_weights
     self._split_weights = split_weights
     self._delay = delay
+    self._delay_features = delay_features
 
     self._mod_init, self._mod_apply = hk.without_apply_rng(
         hk.transform(self._mod))
 
-  def _mod(self, global_feat, p, g, m, rms, fac_g, fac_vec_col, fac_vec_row,
+  def _mod(self, global_feat, p, g, m, o_p, rms, fac_g, fac_vec_col, fac_vec_row,
            fac_vec_v):
     # this doesn't work with scalar parameters, so instead lets just reshape.
     if not p.shape:
@@ -112,8 +115,26 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
     inps = []
 
     inps.append(jnp.expand_dims(g, axis=-1))
+
+    if self._delay_features > 0:
+        # feature consisting of raw difference of parameters values
+        diff = p - o_p
+
+        batch_dp = jnp.expand_dims(diff, axis=-1)
+        inps.append(batch_dp)
+
+        # feature consisting of raw difference of parameters values
+        abs_diff = jnp.abs(p - o_p)
+        batch_dp = jnp.expand_dims(abs_diff, axis=-1)
+        inps.append(batch_dp)
+
     inps.append(jnp.expand_dims(p, axis=-1))
     inps.append(m)
+
+    if self._delay_features > 0:
+        # feature consisting of all momentum values reciprocal also
+        inps.append(jax.lax.reciprocal(1e-8 + m))
+
     inps.append(rms)
     rsqrt = lax.rsqrt(rms + 1e-6)
     inps.append(m * rsqrt)
@@ -168,6 +189,10 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
     # Build the weights of the NN
     last_size = jnp.concatenate(inps, axis=-1).shape[-1]
     last_size += global_feat["training_step_feature"].shape[-1]
+    if self._delay_features > 0:
+        last_size += jnp.einsum('...,...->', diff, g).shape[-1]
+        last_size += jnp.sum(jnp.mean(jnp.square(diff))).shape[-1]
+
 
     weights = []
     biases = []
@@ -227,11 +252,27 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
       inp_stack = second_moment_normalizer(inp_stack, axis=axis)
 
       # add features that should not be normalized
+
       training_step_feature = global_feat["training_step_feature"]
       stacked = jnp.reshape(training_step_feature, [1] * len(axis) +
                             list(training_step_feature.shape[-1:]))
       stacked = jnp.tile(stacked, list(p.shape) + [1])
-      inp_stack = jnp.concatenate([inp_stack, stacked], axis=-1)
+
+      if self._delay_features > 0:
+        dot_feat = jnp.einsum('...,...->', diff, g)
+        stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +
+                                    list(dot_feat.shape[-1:]))
+        stacked_dot = jnp.tile(stacked_dot, list(p.shape) + [1])
+
+        norm = jnp.sum(jnp.mean(jnp.square(diff)))
+
+        stacked_norm = jnp.reshape(norm, [1] * len(axis) +
+                                     list(norm.shape[-1:]))
+        stacked_norm = jnp.tile(stacked_norm, list(p.shape) + [1])
+
+        inp_stack = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
+      else:
+        inp_stack = jnp.concatenate([inp_stack, stacked], axis=-1)
 
       # Manually run the neural network.
       net = inp_stack
@@ -276,6 +317,26 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
                 outs.append(training_step_feature[i] * w[vi][oi])
               else:
                 outs.append(training_step_feature[i] * w[vi, oi])  # pytype: disable=unsupported-operands
+
+            if self._delay_features > 0:
+              dot_feat = jnp.einsum('...,...->', diff, g)
+
+              norm = jnp.sum(jnp.mean(jnp.square(diff)))
+              for i, vi in enumerate(
+              range(vi + 1 + len(training_step_feature),
+                    vi + 1 + len(training_step_feature) + len(dot_feat))):
+                if type(w) == list:  # pylint: disable=unidiomatic-typecheck
+                  outs.append(dot_feat[i] * w[vi][oi])
+                else:
+                  outs.append(dot_feat[i] * w[vi, oi])  # pytype: disable=unsupported-operands
+
+              for i, vi in enumerate(
+                range(vi + 1 + len(training_step_feature) + len(dot_feat),
+                      vi + 1 + len(training_step_feature) + len(dot_feat) + len(norm))):
+                if type(w) == list:  # pylint: disable=unidiomatic-typecheck
+                  outs.append(norm[i] * w[vi][oi])
+                else:
+                  outs.append(norm[i] * w[vi, oi])  # pytype: disable=unsupported-operands
 
           grids.append(outs)
 
@@ -332,15 +393,25 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
     c = 10
     p = jnp.ones([r, c])
     g = jnp.ones([r, c])
+    if self._delay_features > 0:
+        diff = jnp.ones([r, c])
+        abs_diff = jnp.ones([r, c])
 
     m = jnp.ones([r, c, len(self._initial_momentum_decays)])
+    if self._delay_features > 0:
+        recip = jnp.ones([r, c, len(self._initial_momentum_decays)])
+
     rms = jnp.ones([r, c, len(self._initial_rms_decays)])
 
     fac_g = jnp.ones([r, c, len(self._initial_adafactor_decays)])
     fac_vec_row = jnp.ones([r, len(self._initial_adafactor_decays)])
     fac_vec_col = jnp.ones([c, len(self._initial_adafactor_decays)])
     fac_vec_v = jnp.ones([len(self._initial_adafactor_decays)])
-    mod_theta = self._mod_init(key, global_features, p, g, m, rms, fac_g,
+    if self._delay_features > 0:
+        mod_theta = self._mod_init(key, global_features, p, g, diff, abs_diff, m, recip,
+                                   rms, fac_g, fac_vec_col, fac_vec_row, fac_vec_v)
+    else:
+        mod_theta = self._mod_init(key, global_features, p, g, m, rms, fac_g,
                                fac_vec_col, fac_vec_row, fac_vec_v)
     return hk.data_structures.to_haiku_dict({
         "momentum_decays": jnp.zeros([len(self._initial_momentum_decays)]),
@@ -400,7 +471,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
             fac_rolling_features=fac_vec_roll.init(params),
             iteration=jnp.asarray(0, dtype=jnp.int32),
             num_steps=jnp.asarray(num_steps),
-            delayed_gradients_acc=delayed_gradients(delay).init(params))
+            delayed_gradients_acc=delayed_gradients(delay).init(params),
+            delayed_param_acc=delayed_gradients(delay).init(params))
       def update_false(
           self,  # pytype: disable=signature-mismatch  # overriding-parameter-count-checks
           opt_state: DelayAdafacMLPLOptState,
@@ -410,6 +482,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
           is_valid: bool = False,
           key: Optional[PRNGKey] = None,
           delayed_gradients_acc: Any = None,
+          delayed_param_acc: Any = None,
+          old_params: Any = None,
       ) -> DelayAdafacMLPLOptState:
           #  jax.debug.print('false')
           next_opt_state = DelayAdafacMLPLOptState(
@@ -420,7 +494,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
               iteration=opt_state.iteration + 1,
               state=opt_state.state,
               num_steps=opt_state.num_steps,
-              delayed_gradients_acc = delayed_gradients_acc)
+              delayed_gradients_acc=delayed_gradients_acc,
+              delayed_param_acc=delayed_param_acc)
 
           return tree_utils.match_type(next_opt_state, opt_state)
       def update_true(
@@ -432,6 +507,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
           is_valid: bool = False,
           key: Optional[PRNGKey] = None,
           delayed_gradients_acc: Any = None,
+          delayed_param_acc: Any = None,
+          old_params: Any = None,
       ) -> DelayAdafacMLPLOptState:
         # jax.debug.print('true')
         mom_roll, rms_roll, fac_vec_roll = self._get_rolling()
@@ -453,6 +530,7 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
 
         next_params = jax.tree_util.tree_map(fun, opt_state.params, grad,
                                              next_mom_rolling.m,
+                                             old_params,
                                              next_rms_rolling.rms, fac_g,
                                              next_fac_rolling_features.v_col,
                                              next_fac_rolling_features.v_row,
@@ -466,7 +544,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
             iteration=opt_state.iteration + 1,
             state=model_state,
             num_steps=opt_state.num_steps,
-            delayed_gradients_acc=delayed_gradients_acc)
+            delayed_gradients_acc=delayed_gradients_acc,
+            delayed_param_acc=delayed_params_acc)
 
         return tree_utils.match_type(next_opt_state, opt_state)
 
@@ -485,12 +564,22 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
 
           next_delayed_gradients, old_grad = delayed_gradients(delay).update(opt_state.delayed_gradients_acc, grad)
 
+          def update_delayed_params_true(d_p_a, p):
+              return (delayed_gradients(delay).update(d_p_a, p))
+
+          def update_delayed_params_false(d_p_a, p):
+              return (d_p_a, p)
+
+          next_delayed_param, old_params = jax.lax.cond(self.delay_features > 0,
+                                                        update_delayed_params_true, update_delayed_params_false,
+                                                        opt_state.delayed_param_acc, opt_state.params)
+
           #jax.debug.print('old grad {g}', g=old_grad)
           #jax.debug.print('new state {s}', s = next_delayed_gradients)
 
           return jax.lax.cond(next_delayed_gradients.update,
                               self.update_true,
                               self.update_false, opt_state, old_grad, loss, model_state, is_valid, key,
-                              next_delayed_gradients)
+                              next_delayed_gradients, next_delayed_param, old_params)
 
     return _Opt(theta)
