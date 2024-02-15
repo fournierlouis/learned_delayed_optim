@@ -242,12 +242,14 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     diff = p - o_p
 
                     batch_dp = jnp.expand_dims(diff, axis=-1)
-                    inps.append(batch_dp)
+                    if self.delay_features == 1:
+                        inps.append(batch_dp)
 
                     # feature consisting of raw difference of parameters values
                     abs_diff = jnp.abs(p - o_p)
                     batch_dp = jnp.expand_dims(abs_diff, axis=-1)
-                    inps.append(batch_dp)
+                    if self.delay_features == 2:
+                        inps.append(batch_dp)
 
                     # feature consisting of raw parameter values
                     batch_p = jnp.expand_dims(p, axis=-1)
@@ -257,7 +259,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     inps.append(m)
 
                     # feature consisting of all momentum values reciprocal also
-                    inps.append(jax.lax.reciprocal(1e-8 + m))
+                    if self.delay_features == 3:
+                        inps.append(jax.lax.reciprocal(1e-8 + m))
 
                     inp_stack = jnp.concatenate(inps, axis=-1)
                     axis = list(range(len(p.shape)))
@@ -282,7 +285,14 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                                           list(training_step_feature.shape[-1:]))
                     stacked = jnp.tile(stacked, list(p.shape) + [1])
 
-                    inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
+                    if self.delay_features == 4:
+                        inp = jnp.concatenate([inp_stack, stacked, stacked_dot], axis=-1)
+                    if self.delay_features == 5:
+                        inp = jnp.concatenate([inp_stack, stacked, stacked_norm], axis=-1)
+                    if self.delay_features < 4:
+                        inp = jnp.concatenate([inp_stack, stacked], axis=-1)
+
+                    #inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
 
                     return (inp)
 
