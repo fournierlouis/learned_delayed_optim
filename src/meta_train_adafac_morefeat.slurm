@@ -36,6 +36,7 @@ wandb offline
 set -x
 
 delay=${1}
+delay=${1}
 
 python3.11 src/main.py \
     --config config/meta_train/meta_train_delay_adafac32_image-mlp-fmst_schedule_3e-3_10000_d3.py \
