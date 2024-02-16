@@ -78,12 +78,23 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
     def init(self, key: PRNGKey) -> lopt_base.MetaParams:
         # There are 19 features used as input. For now, hard code this.
-        def return_features_normal():
-            return(19)
-        def return_features_more():
-            return(20)
+        #def return_features_normal():
+        #    return(19)
+        #def return_features_more():
+        #    return(20)
+        #def return_features_muchmore():
+        #    return(25)
 
-        num_features = jax.lax.cond(self._delay_features>0, return_features_more, return_features_normal)
+        #num_features = jax.lax.cond(self._delay_features>0, return_features_more, return_features_normal)
+
+        if self._delay_features == 0:
+            num_features = 19
+        else:
+            if self._delay_features == 3:
+                num_features = 25
+            else:
+                num_features = 20
+
 
         #print('nb feat', num_features)
         #if self._delay_features > 0:
