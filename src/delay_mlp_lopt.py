@@ -93,7 +93,10 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
             if self._delay_features == 3:
                 num_features = 25
             else:
-                num_features = 20
+                if self._delay_features == 6:
+                    num_features = 23
+                else
+                    num_features = 20
 
 
         #print('nb feat', num_features)
@@ -253,13 +256,13 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     diff = p - o_p
 
                     batch_dp = jnp.expand_dims(diff, axis=-1)
-                    if self.delay_features == 1:
+                    if self.delay_features in [1,6]:
                         inps.append(batch_dp)
 
                     # feature consisting of raw difference of parameters values
                     abs_diff = jnp.abs(p - o_p)
                     batch_dp = jnp.expand_dims(abs_diff, axis=-1)
-                    if self.delay_features == 2:
+                    if self.delay_features in [2,6]:
                         inps.append(batch_dp)
 
                     # feature consisting of raw parameter values
@@ -270,13 +273,17 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     inps.append(m)
 
                     # feature consisting of all momentum values reciprocal also
-                    if self.delay_features == 3:
-                        inps.append(jax.lax.reciprocal(1e-8 + m))
+                    #if self.delay_features == 3:
+                    #    inps.append(jax.lax.reciprocal(1e-8 + m))
 
                     inp_stack = jnp.concatenate(inps, axis=-1)
                     axis = list(range(len(p.shape)))
 
                     inp_stack = _second_moment_normalizer(inp_stack, axis=axis)
+
+                    # feature consisting of all momentum values reciprocal also
+                    if self.delay_features == 3:
+                        inp_stack = jnp.concatenate([inp_stack, jax.lax.reciprocal(1e-8 + m)])
 
                     dot_feat = jnp.einsum('...,...->', diff, g)
                     stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +
@@ -300,6 +307,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                         inp = jnp.concatenate([inp_stack, stacked, stacked_dot], axis=-1)
                     if self.delay_features == 5:
                         inp = jnp.concatenate([inp_stack, stacked, stacked_norm], axis=-1)
+                    if self.delay_features == 6:
+                        inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
                     if self.delay_features < 4:
                         inp = jnp.concatenate([inp_stack, stacked], axis=-1)
 
