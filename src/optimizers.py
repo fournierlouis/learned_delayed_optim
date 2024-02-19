@@ -96,7 +96,7 @@ def _sgd(args):
 
     task = get_task(args)
 
-    do_delay = args.delay_optim_test
+    do_delay = args.delay == 0#args.delay_optim_test
 
     @jax.jit
     def update_nodelay(opt_state, key, batch):
@@ -145,7 +145,7 @@ def _adam(args):
 
     task = get_task(args)
 
-    do_delay = args.delay_optim_test
+    do_delay = args.delay == 0#_optim_test
 
     @jax.jit
     def update_nodelay(opt_state, key, batch):
