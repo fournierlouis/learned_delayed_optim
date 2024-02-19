@@ -95,7 +95,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
             else:
                 if self._delay_features == 6:
                     num_features = 23
-                else
+                else:
                     num_features = 20
 
 
