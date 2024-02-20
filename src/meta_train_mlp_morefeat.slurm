@@ -26,6 +26,7 @@
 # Cleans out the modules loaded in interactive and inherited by default
 module purge
 
+cd /gpfswork/rech/bao/unl88dr/learned_delayed_optim/
 module load cpuarch/amd
 module load cudnn/10.1-v7.5.1.10
 module load python/3.11.5

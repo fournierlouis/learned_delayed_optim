@@ -543,10 +543,10 @@ def get_optimizer(args):
         "fedlagg-wavg": _fedlagg,
         "fedlagg-adafac": _fedlagg,
 
-        "adafac": _delay_trainer,
-        "delay-adafac": _delay_trainer,
-        "mlp": _delay_trainer,
-        "delay-mlp": _delay_meta_trainer
+        #"adafac": _delay_trainer,
+        #"delay-adafac": _delay_trainer,
+        #"mlp": _delay_trainer,
+        #"delay-mlp": _delay_meta_trainer
     }
 
     return optimizers[args.optimizer](args)  # TODO Find better way to do this
