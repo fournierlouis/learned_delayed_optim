@@ -106,7 +106,8 @@ def _delay_meta_trainer(args):
         lagg = DelayAdafacMLPLOpt(
             hidden_size=args.hidden_size,
             delay=args.delay,
-            delay_features=args.delay_features
+            delay_features=args.delay_features,
+            eta=args.eta
         )
     elif args.optimizer in ["mlp"]:
         lagg = MLPLOpt(
@@ -116,7 +117,8 @@ def _delay_meta_trainer(args):
         lagg = DelayMLPLOpt(
             hidden_size=args.hidden_size,
             delay=args.delay,
-            delay_features=args.delay_features
+            delay_features=args.delay_features,
+            eta=args.eta
         )
 
 

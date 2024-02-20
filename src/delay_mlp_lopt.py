@@ -59,7 +59,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         with_all_grads=True,
         with_avg=False,
         delay=0,
-        delay_features=0
+        delay_features=0,
+        eta=1.0
     ):
         super().__init__()
         self._step_mult = step_mult
@@ -70,6 +71,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         self._with_avg = with_avg
         self._delay = delay
         self._delay_features = delay_features
+        self._eta = eta
 
         def ff_mod(inp):
             return hk.nets.MLP([hidden_size] * hidden_layers + [2])(inp)
@@ -114,6 +116,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
         self, theta: lopt_base.MetaParams, is_training: bool = False
     ) -> opt_base.Optimizer:
         decays = jnp.asarray([0.1, 0.5, 0.9, 0.99, 0.999, 0.9999])
+        #etas = jnp.asarray([0.0001, 0.001, 0.01, 0.1, 1])
+        eta = self._eta
 
         mod = self._mod
         exp_mult = self._exp_mult
@@ -265,6 +269,12 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     if self.delay_features in [2,6]:
                         inps.append(batch_dp)
 
+
+                    # gap-aware: grad pointwise * (1/G) = grad *
+                    # C = maxstep * momentum
+                    # G = 1 + abs_diff / C
+                    # 1/G = 1 / (1 + abs_diff / C) = C / (C + abs_diff)
+
                     # feature consisting of raw parameter values
                     batch_p = jnp.expand_dims(p, axis=-1)
                     inps.append(batch_p)
@@ -273,8 +283,26 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     inps.append(m)
 
                     # feature consisting of all momentum values reciprocal also
-                    #if self.delay_features == 3:
-                    #    inps.append(jax.lax.reciprocal(1e-8 + m))
+                    if self.delay_features == 3:
+                        inps.append(jax.lax.reciprocal(1e-8 + m))
+
+                    if self.delay_features == 7:
+                        # delay-compensation
+                        dot_feat = jnp.einsum('...,...->', diff, g)
+                        inps.append(jnp.expand_dims(dot_feat * g, axis=-1))
+
+                    if self.delay_features == 8:
+                        # delay-compensation diagonal only
+                        outer_prod_diag = g * g
+                        inps.append(jnp.expand_dims(outer_prod_diag * diff, axis=-1))
+
+                    if self.delay_features == 10:
+                        #gap_aware
+                        ratio = m * jax.lax.reciprocal(1e-8 + diff)
+                        inps.append(jnp.expand_dims(jax.lax.reciprocal(1 + eta*ratio) * g,
+                                                    axis=-1))
+                        #etas
+
 
                     inp_stack = jnp.concatenate(inps, axis=-1)
                     axis = list(range(len(p.shape)))
@@ -282,8 +310,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     inp_stack = _second_moment_normalizer(inp_stack, axis=axis)
 
                     # feature consisting of all momentum values reciprocal also
-                    if self.delay_features == 3:
-                        inp_stack = jnp.concatenate([inp_stack, jax.lax.reciprocal(1e-8 + m)])
+                    #if self.delay_features == 3:
+                    #    inp_stack = jnp.concatenate([inp_stack, jax.lax.reciprocal(1e-8 + m)])
 
                     dot_feat = jnp.einsum('...,...->', diff, g)
                     stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +

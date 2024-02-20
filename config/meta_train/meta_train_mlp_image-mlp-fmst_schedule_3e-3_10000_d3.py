@@ -11,7 +11,7 @@ schedule = dict(
 learning_rate = 3e-3
 num_outer_steps = 10000
 task = "image-mlp-fmst"
-optimizer = "delay-mlp"
+optimizer = "mlp"
 name_suffix = "_3e-3_10000_d3:1"
 
 num_local_steps = 16
