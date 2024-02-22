@@ -337,7 +337,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                         inp = jnp.concatenate([inp_stack, stacked, stacked_norm], axis=-1)
                     if self.delay_features == 6:
                         inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
-                    if self.delay_features < 4:
+                    if self.delay_features < 4 or self.delay_features > 6:
                         inp = jnp.concatenate([inp_stack, stacked], axis=-1)
 
                     #inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
