@@ -37,6 +37,7 @@ set -x
 
 delay=${1}
 delay_features=${2}
+eta=${3}
 
 python3.11 src/main.py \
     --config config/meta_train/meta_train_delay_mlp_image-mlp-fmst_schedule_3e-3_10000_d3.py \
@@ -46,4 +47,5 @@ python3.11 src/main.py \
     --delay ${delay} \
     --tfds_data_dir $STORE/tf_datasets\
     --wandb_dir $STORE/jax_wandb\
-    --delay_features ${delay_features}
+    --delay_features ${delay_features}\
+    --eta ${eta}
