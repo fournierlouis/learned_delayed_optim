@@ -107,7 +107,7 @@ def _delay_meta_trainer(args):
             hidden_size=args.hidden_size,
             delay=args.delay,
             delay_features=args.delay_features,
-            eta=args.eta
+            #eta=args.eta
         )
     elif args.optimizer in ["mlp"]:
         lagg = MLPLOpt(
