@@ -276,9 +276,9 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     # 1/G = 1 / (1 + abs_diff / C) = C / (C + abs_diff)
 
                     # feature consisting of raw parameter values
-                    print("shape before", p.shape)
+                    jax.debug.print("shape before {s}", s=p.shape)
                     batch_p = jnp.expand_dims(p, axis=-1)
-                    print('shape after', batch_p.shape)
+                    jax.debug.print("shape after {s}", s=batch_p.shape)
                     inps.append(batch_p)
 
                     # feature consisting of all momentum values
