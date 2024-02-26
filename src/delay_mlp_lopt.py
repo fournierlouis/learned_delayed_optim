@@ -296,12 +296,35 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                         outer_prod_diag = g * g
                         inps.append(jnp.expand_dims(outer_prod_diag * diff, axis=-1))
 
-                    if self.delay_features == 10:
+                    if self.delay_features == 9:
                         #gap_aware
+                        ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+                        inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
+                                                    )
+                        #etas
+
+                    if self.delay_features == 10:
+                        #gap_aware (with no abs)
                         ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + diff), axis=-1)
                         inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
                                                     )
                         #etas
+
+                    if self.delay_features == 11:
+                        inps.append(m * jnp.expand_dims(g, axis=-1),
+                                                    )
+                        inps.append(m * jnp.expand_dims(abs_diff, axis=-1),
+                                                    )
+
+                    if self.delay_features == 12:
+                        inps.append(m * jnp.expand_dims(g, axis=-1),
+                                                    )
+                        inps.append(m * jnp.expand_dims(abs_diff, axis=-1),
+                                                    )
+                        inps.append(m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + g), axis=-1),
+                                                    )
+                        inps.append(m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1),
+                                                    )
 
 
                     inp_stack = jnp.concatenate(inps, axis=-1)
