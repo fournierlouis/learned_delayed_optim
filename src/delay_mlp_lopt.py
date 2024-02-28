@@ -93,8 +93,10 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
             num_features = 19
         elif self._delay_features in [3, 9, 10]:
             num_features = 25
-        elif self._delay_features == 6:
+        elif self._delay_features in [6, 13, 14]:
             num_features = 23
+        elif self._delay_features in [15]:
+            num_features = 27
         elif self._delay_features == 12:
             num_features = 43
         elif self._delay_features == 11:
@@ -313,12 +315,14 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                         #etas
 
                     if self.delay_features == 11:
+                        #Wtf was I doing?
                         inps.append(m * jnp.expand_dims(g, axis=-1),
                                                     )
                         inps.append(m * jnp.expand_dims(abs_diff, axis=-1),
                                                     )
 
                     if self.delay_features == 12:
+                        #Same here
                         inps.append(m * jnp.expand_dims(g, axis=-1),
                                                     )
                         inps.append(m * jnp.expand_dims(abs_diff, axis=-1),
@@ -328,6 +332,27 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                         inps.append(m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1),
                                                     )
 
+                    if self.delay_features == 13:
+                        inps.append(m * jnp.expand_dims(g, axis=-1),
+                                                    )
+                        inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
+                                    )
+
+                    if self.delay_features == 14:
+                        inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
+                                    )
+                        inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
+                                    )
+
+                    if self.delay_features == 15:
+                        inps.append(m * jnp.expand_dims(g, axis=-1),
+                                                    )
+                        inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
+                                    )
+                        inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
+                                    )
+                        inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
+                                    )
 
                     inp_stack = jnp.concatenate(inps, axis=-1)
                     axis = list(range(len(p.shape)))
