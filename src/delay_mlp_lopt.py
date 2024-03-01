@@ -93,10 +93,12 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
             num_features = 19
         elif self._delay_features in [3, 9, 10]:
             num_features = 25
-        elif self._delay_features in [6, 13, 14]:
+        elif self._delay_features in [6]:
             num_features = 23
+        elif self._delay_features in [13, 14]:
+            num_features = 26
         elif self._delay_features in [15]:
-            num_features = 27
+            num_features = 33
         elif self._delay_features == 12:
             num_features = 43
         elif self._delay_features == 11:
