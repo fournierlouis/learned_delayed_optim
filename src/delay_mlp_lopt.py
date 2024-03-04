@@ -391,13 +391,13 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     if self.delay_features == 22:
                         #gap_aware ratio
                         ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
-                        inps.append(ratio * g)
+                        inps.append(ratio * batch_g)
                         #etas
 
                     if self.delay_features == 23:
                         #gap_aware INVERSE ratio
                         ratio = jax.lax.reciprocal(1e-8 + m)* jnp.expand_dims(abs_diff, axis=-1)
-                        inps.append(ratio * g)
+                        inps.append(ratio * batch_g)
                         #etas
 
                     if self.delay_features == 24:
