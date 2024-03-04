@@ -103,7 +103,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
             num_features = 43
         elif self._delay_features == 11:
             num_features = 31
-        elif self._delay_features in [1,2,4,5,7,8,17,19]:
+        elif self._delay_features in [1,2,4,5,7,8,17,19,26,27]:
             num_features = 20
 
 
@@ -410,6 +410,15 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                         outer_prod_diag = m * m
                         inps.append(outer_prod_diag * jnp.expand_dims(diff, axis=-1))
 
+                    if self.delay_features == 26:
+                        # delay-compensation
+                        dot_feat = jnp.einsum('...,...->', abs_diff, g)
+                        inps.append(jnp.expand_dims(dot_feat * g, axis=-1))
+
+                    if self.delay_features == 27:
+                        # delay-compensation diagonal only
+                        outer_prod_diag = g * g
+                        inps.append(jnp.expand_dims(outer_prod_diag * abs_diff, axis=-1))
 
                     inp_stack = jnp.concatenate(inps, axis=-1)
                     axis = list(range(len(p.shape)))
