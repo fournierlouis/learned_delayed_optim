@@ -25,6 +25,7 @@ import flax
 class DelayMLPLOptState:
   params: Any
   rolling_features: common.MomAccumulator
+  abs_rolling_features: common.MomAccumulator
   iteration: jnp.ndarray
   state: Any
   delayed_gradients_acc: DelayedGradientsAccumulator
@@ -91,7 +92,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
         if self._delay_features == 0:
             num_features = 19
-        elif self._delay_features in [3, 9, 10, 16,18,20,21,22,23,24,25]:
+        elif self._delay_features in [3, 9, 10, 16,18,20,21,22,23,24,25,28,29,30,31,32,33]:
             num_features = 25
         elif self._delay_features in [6]:
             num_features = 23
@@ -155,6 +156,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     params=params,
                     state=model_state,
                     rolling_features=common.vec_rolling_mom(decays).init(params),
+                    abs_rolling_features=common.vec_rolling_mom(decays).init(params),
                     iteration=jnp.asarray(0, dtype=jnp.int32),
                     delayed_gradients_acc=delayed_gradients(delay).init(params),
                     delayed_param_acc=delayed_gradients(delay).init(params)) # if delay_features > 0 else None)
@@ -176,6 +178,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 next_opt_state = DelayMLPLOptState(
                     params=opt_state.params,
                     rolling_features=opt_state.rolling_features,
+                    abs_rolling_features=opt_state.abs_rolling_features,
                     iteration=opt_state.iteration + 1,
                     state=model_state,
                     delayed_gradients_acc=delayed_gradients_acc,
@@ -241,6 +244,9 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 next_rolling_features = common.vec_rolling_mom(decays).update(
                     opt_state.rolling_features, grad)
 
+                next_abs_rolling_features = common.vec_rolling_mom(decays).update(
+                    opt_state.rolling_features, jnp.abs(grad))
+
                 training_step_feature = _tanh_embedding(opt_state.iteration)
 
                 #if delay_features > 0:
@@ -256,7 +262,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     # append(momentum of (p-old_p) ? )
                     #features.append()
 
-                def features_withdelay(p, g, m, o_p):
+                def features_withdelay(p, g, m, abs_m, o_p):
                     inps = []
                     # feature consisting of raw gradient values
                     batch_g = jnp.expand_dims(g, axis=-1)
@@ -420,6 +426,42 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                         outer_prod_diag = g * g
                         inps.append(jnp.expand_dims(outer_prod_diag * abs_diff, axis=-1))
 
+                    if self.delay_features == 28:#20:
+                        #gap_aware ratio
+                        ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+                        inps.append(ratio)
+                        #etas
+
+                    if self.delay_features == 29:#21:
+                        #gap_aware INVERSE ratio
+                        ratio = jax.lax.reciprocal(1e-8 + abs_m)* jnp.expand_dims(abs_diff, axis=-1)
+                        inps.append(ratio)
+                        #etas
+
+                    if self.delay_features == 30:#22:
+                        #gap_aware ratio
+                        ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+                        inps.append(ratio * batch_g)
+                        #etas
+
+                    if self.delay_features == 31:#23:
+                        #gap_aware INVERSE ratio
+                        ratio = jax.lax.reciprocal(1e-8 + abs_m)* jnp.expand_dims(abs_diff, axis=-1)
+                        inps.append(ratio * batch_g)
+                        #etas
+
+                    if self.delay_features == 32:#9:
+                        #gap_aware
+                        ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+                        inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
+                                                    )
+                        #etas
+
+
+                    if self.delay_features == 33:
+                        #abs_m
+                        inps.append(abs_m)
+
                     inp_stack = jnp.concatenate(inps, axis=-1)
                     axis = list(range(len(p.shape)))
 
@@ -489,18 +531,19 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
                     return (inp)
 
-                def _update_tensor(p, g, m, o_p):
+                def _update_tensor(p, g, m, abs_m, o_p):
                     # this doesn't work with scalar parameters, so let's reshape.
                     if not p.shape:
                         p = jnp.expand_dims(p, 0)
                         g = jnp.expand_dims(g, 0)
                         m = jnp.expand_dims(m, 0)
+                        abs_m = jnp.expand_dims(abs_m, 0)
                         did_reshape = True
                     else:
                         did_reshape = False
 
                     if self.delay_features > 0:
-                        inp = features_withdelay(p,g,m,o_p)
+                        inp = features_withdelay(p,g,m,abs_m,o_p)
                     else:
                         inp = features_normal(p,g,m,o_p)
 
@@ -554,7 +597,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 #jax.debug.print("using delayed feat? {s}", s=self.delay_features)
 
                 next_params = jax.tree_util.tree_map(_update_tensor,
-                                       opt_state.params, grad, next_rolling_features.m, old_params)
+                                       opt_state.params, grad, next_rolling_features.m, next_abs_rolling_features.m, old_params)
 
                 #next_params = jax.tree_util.tree_map(_update_tensor, opt_state.params,
                 #                                     grad, next_rolling_features.m)
@@ -563,6 +606,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     params=tree_utils.match_type(next_params, opt_state.params),
                     rolling_features=tree_utils.match_type(next_rolling_features,
                                                            opt_state.rolling_features),
+                    abs_rolling_features=tree_utils.match_type(next_abs_rolling_features,
+                                                               opt_state.abs_rolling_features),
                     iteration=opt_state.iteration + 1,
                     state=model_state,
                     delayed_gradients_acc=delayed_gradients_acc,
