@@ -90,22 +90,25 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
 
         #num_features = jax.lax.cond(self._delay_features>0, return_features_more, return_features_normal)
 
-        if self._delay_features == 0:
-            num_features = 19
-        elif self._delay_features in [3, 9, 10, 16,18,20,21,22,23,24,25,28,29,30,31,32,33]:
-            num_features = 25
-        elif self._delay_features in [6]:
-            num_features = 23
-        elif self._delay_features in [13, 14]:
-            num_features = 26
-        elif self._delay_features in [15]:
-            num_features = 33
-        elif self._delay_features == 12:
-            num_features = 43
-        elif self._delay_features == 11:
-            num_features = 31
-        elif self._delay_features in [1,2,4,5,7,8,17,19,26,27]:
-            num_features = 20
+        num_features = 19
+        #if self._delay_features == 0:
+        #    num_features = 19
+
+        for i in self._delay_features:
+            if i in [3, 9, 10, 16,18,20,21,22,23,24,25,28,29,30,31,32,33]:
+                num_features += 6 # 25
+            elif i in [6]:
+                num_features += 4 #23
+            elif i in [13, 14]:
+                num_features += 7 # 26
+            elif i in [15]:
+                num_features += 14 #33
+            elif i == 12:
+                num_features += 24 #43
+            elif i == 11:
+                num_features += 12 #31
+            elif i in [1,2,4,5,7,8,17,19,26,27]:
+                num_features += 1 #20
 
 
         #print('nb feat', num_features)
@@ -210,7 +213,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 def update_delayed_params_false(d_p_a, p):
                     return(d_p_a, p)
 
-                next_delayed_param, old_params = jax.lax.cond(self.delay_features>0,
+                next_delayed_param, old_params = jax.lax.cond(self.delay_features != [0],
                                                           update_delayed_params_true, update_delayed_params_false,
                                                           opt_state.delayed_param_acc, opt_state.params)
 
@@ -272,14 +275,10 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     diff = p - o_p
 
                     batch_dp = jnp.expand_dims(diff, axis=-1)
-                    if self.delay_features in [1,6]:
-                        inps.append(batch_dp)
 
                     # feature consisting of raw difference of parameters values
                     abs_diff = jnp.abs(p - o_p)
                     batch_dp = jnp.expand_dims(abs_diff, axis=-1)
-                    if self.delay_features in [2,6]:
-                        inps.append(batch_dp)
 
 
                     # gap-aware: grad pointwise * (1/G) = grad *
@@ -294,173 +293,180 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     # feature consisting of all momentum values
                     inps.append(m)
 
-                    # feature consisting of all momentum values reciprocal also
-                    if self.delay_features == 3:
-                        inps.append(jax.lax.reciprocal(1e-8 + m))
-
-                    if self.delay_features == 7:
-                        # delay-compensation
-                        dot_feat = jnp.einsum('...,...->', diff, g)
-                        inps.append(jnp.expand_dims(dot_feat * g, axis=-1))
-
-                    if self.delay_features == 8:
-                        # delay-compensation diagonal only
-                        outer_prod_diag = g * g
-                        inps.append(jnp.expand_dims(outer_prod_diag * diff, axis=-1))
-
-                    if self.delay_features == 9:
-                        #gap_aware
-                        ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
-                        inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
-                                                    )
-                        #etas
-
-                    if self.delay_features == 10:
-                        #gap_aware (with no abs)
-                        ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + diff), axis=-1)
-                        inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
-                                                    )
-                        #etas
-
-                    if self.delay_features == 11:
-                        #Wtf was I doing?
-                        inps.append(m * jnp.expand_dims(g, axis=-1),
-                                                    )
-                        inps.append(m * jnp.expand_dims(abs_diff, axis=-1),
-                                                    )
-
-                    if self.delay_features == 12:
-                        #Same here
-                        inps.append(m * jnp.expand_dims(g, axis=-1),
-                                                    )
-                        inps.append(m * jnp.expand_dims(abs_diff, axis=-1),
-                                                    )
-                        inps.append(m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + g), axis=-1),
-                                                    )
-                        inps.append(m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1),
-                                                    )
-
-                    if self.delay_features == 13:
-                        inps.append(m * jnp.expand_dims(g, axis=-1),
-                                                    )
-                        inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
-                                    )
-
-                    if self.delay_features == 14:
-                        inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
-                                    )
-                        inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
-                                    )
-
-                    if self.delay_features == 15:
-                        inps.append(m * jnp.expand_dims(g, axis=-1),
-                                                    )
-                        inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
-                                    )
-                        inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
-                                    )
-                        inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
-                                    )
-
-                    if self.delay_features == 16:
-                        #One at a..
-                        inps.append(m * jnp.expand_dims(g, axis=-1),
-                                                    )
-
-                    if self.delay_features == 17:
-                        # ..time
-                        inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
-                                    )
-
-                    if self.delay_features == 18:
-                        #One at a..
-                        inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
-                                    )
-
-                    if self.delay_features == 19:
-                        # ..time
-                        inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
-                                    )
-
-                    if self.delay_features == 20:
-                        #gap_aware ratio
-                        ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
-                        inps.append(ratio)
-                        #etas
-
-                    if self.delay_features == 21:
-                        #gap_aware INVERSE ratio
-                        ratio = jax.lax.reciprocal(1e-8 + m)* jnp.expand_dims(abs_diff, axis=-1)
-                        inps.append(ratio)
-                        #etas
-
-                    if self.delay_features == 22:
-                        #gap_aware ratio
-                        ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
-                        inps.append(ratio * batch_g)
-                        #etas
-
-                    if self.delay_features == 23:
-                        #gap_aware INVERSE ratio
-                        ratio = jax.lax.reciprocal(1e-8 + m)* jnp.expand_dims(abs_diff, axis=-1)
-                        inps.append(ratio * batch_g)
-                        #etas
-
-                    if self.delay_features == 24:
-                        # delay-compensation momentum
-                        dot_feat = jnp.einsum('...,b...->', diff, g)
-                        inps.append(dot_feat * m)
-
-                    if self.delay_features == 25:
-                        # delay-compensation diagonal only  momentum
-                        outer_prod_diag = m * m
-                        inps.append(outer_prod_diag * jnp.expand_dims(diff, axis=-1))
-
-                    if self.delay_features == 26:
-                        # delay-compensation
-                        dot_feat = jnp.einsum('...,...->', abs_diff, g)
-                        inps.append(jnp.expand_dims(dot_feat * g, axis=-1))
-
-                    if self.delay_features == 27:
-                        # delay-compensation diagonal only
-                        outer_prod_diag = g * g
-                        inps.append(jnp.expand_dims(outer_prod_diag * abs_diff, axis=-1))
-
-                    if self.delay_features == 28:#20:
-                        #gap_aware ratio
-                        ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
-                        inps.append(ratio)
-                        #etas
-
-                    if self.delay_features == 29:#21:
-                        #gap_aware INVERSE ratio
-                        ratio = jax.lax.reciprocal(1e-8 + abs_m)* jnp.expand_dims(abs_diff, axis=-1)
-                        inps.append(ratio)
-                        #etas
-
-                    if self.delay_features == 30:#22:
-                        #gap_aware ratio
-                        ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
-                        inps.append(ratio * batch_g)
-                        #etas
-
-                    if self.delay_features == 31:#23:
-                        #gap_aware INVERSE ratio
-                        ratio = jax.lax.reciprocal(1e-8 + abs_m)* jnp.expand_dims(abs_diff, axis=-1)
-                        inps.append(ratio * batch_g)
-                        #etas
-
-                    if self.delay_features == 32:#9:
-                        #gap_aware
-                        ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
-                        inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
-                                                    )
-                        #etas
-
-
-                    if self.delay_features == 33:
-                        #abs_m
-                        inps.append(abs_m)
+                    for feat in self.delay_features:
+                        if feat in [1,6]:
+                            inps.append(batch_dp)
+                            
+                        if feat in [2,6]:
+                            inps.append(batch_dp)
+    
+                        # feature consisting of all momentum values reciprocal also
+                        if feat == 3:
+                            inps.append(jax.lax.reciprocal(1e-8 + m))
+    
+                        if feat == 7:
+                            # delay-compensation
+                            dot_feat = jnp.einsum('...,...->', diff, g)
+                            inps.append(jnp.expand_dims(dot_feat * g, axis=-1))
+    
+                        if feat == 8:
+                            # delay-compensation diagonal only
+                            outer_prod_diag = g * g
+                            inps.append(jnp.expand_dims(outer_prod_diag * diff, axis=-1))
+    
+                        if feat == 9:
+                            #gap_aware
+                            ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+                            inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
+                                                        )
+                            #etas
+    
+                        if feat == 10:
+                            #gap_aware (with no abs)
+                            ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + diff), axis=-1)
+                            inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
+                                                        )
+                            #etas
+    
+                        if feat == 11:
+                            #Wtf was I doing?
+                            inps.append(m * jnp.expand_dims(g, axis=-1),
+                                                        )
+                            inps.append(m * jnp.expand_dims(abs_diff, axis=-1),
+                                                        )
+    
+                        if feat == 12:
+                            #Same here
+                            inps.append(m * jnp.expand_dims(g, axis=-1),
+                                                        )
+                            inps.append(m * jnp.expand_dims(abs_diff, axis=-1),
+                                                        )
+                            inps.append(m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + g), axis=-1),
+                                                        )
+                            inps.append(m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1),
+                                                        )
+    
+                        if feat == 13:
+                            inps.append(m * jnp.expand_dims(g, axis=-1),
+                                                        )
+                            inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
+                                        )
+    
+                        if feat == 14:
+                            inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
+                                        )
+                            inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
+                                        )
+    
+                        if feat == 15:
+                            inps.append(m * jnp.expand_dims(g, axis=-1),
+                                                        )
+                            inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
+                                        )
+                            inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
+                                        )
+                            inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
+                                        )
+    
+                        if feat == 16:
+                            #One at a..
+                            inps.append(m * jnp.expand_dims(g, axis=-1),
+                                                        )
+    
+                        if feat == 17:
+                            # ..time
+                            inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
+                                        )
+    
+                        if feat == 18:
+                            #One at a..
+                            inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
+                                        )
+    
+                        if feat == 19:
+                            # ..time
+                            inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
+                                        )
+    
+                        if feat == 20:
+                            #gap_aware ratio
+                            ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+                            inps.append(ratio)
+                            #etas
+    
+                        if feat == 21:
+                            #gap_aware INVERSE ratio
+                            ratio = jax.lax.reciprocal(1e-8 + m)* jnp.expand_dims(abs_diff, axis=-1)
+                            inps.append(ratio)
+                            #etas
+    
+                        if feat == 22:
+                            #gap_aware ratio
+                            ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+                            inps.append(ratio * batch_g)
+                            #etas
+    
+                        if feat == 23:
+                            #gap_aware INVERSE ratio
+                            ratio = jax.lax.reciprocal(1e-8 + m)* jnp.expand_dims(abs_diff, axis=-1)
+                            inps.append(ratio * batch_g)
+                            #etas
+    
+                        if feat == 24:
+                            # delay-compensation momentum
+                            dot_feat = jnp.einsum('...,b...->', diff, g)
+                            inps.append(dot_feat * m)
+    
+                        if feat == 25:
+                            # delay-compensation diagonal only  momentum
+                            outer_prod_diag = m * m
+                            inps.append(outer_prod_diag * jnp.expand_dims(diff, axis=-1))
+    
+                        if feat == 26:
+                            # delay-compensation
+                            dot_feat = jnp.einsum('...,...->', abs_diff, g)
+                            inps.append(jnp.expand_dims(dot_feat * g, axis=-1))
+    
+                        if feat == 27:
+                            # delay-compensation diagonal only
+                            outer_prod_diag = g * g
+                            inps.append(jnp.expand_dims(outer_prod_diag * abs_diff, axis=-1))
+    
+                        if feat == 28:#20:
+                            #gap_aware ratio
+                            ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+                            inps.append(ratio)
+                            #etas
+    
+                        if feat == 29:#21:
+                            #gap_aware INVERSE ratio
+                            ratio = jax.lax.reciprocal(1e-8 + abs_m)* jnp.expand_dims(abs_diff, axis=-1)
+                            inps.append(ratio)
+                            #etas
+    
+                        if feat == 30:#22:
+                            #gap_aware ratio
+                            ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+                            inps.append(ratio * batch_g)
+                            #etas
+    
+                        if feat == 31:#23:
+                            #gap_aware INVERSE ratio
+                            ratio = jax.lax.reciprocal(1e-8 + abs_m)* jnp.expand_dims(abs_diff, axis=-1)
+                            inps.append(ratio * batch_g)
+                            #etas
+    
+                        if feat == 32:#9:
+                            #gap_aware
+                            ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+                            inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
+                                                        )
+                            #etas
+    
+    
+                        if feat == 33:
+                            #abs_m
+                            inps.append(abs_m)
 
                     inp_stack = jnp.concatenate(inps, axis=-1)
                     axis = list(range(len(p.shape)))
@@ -489,15 +495,19 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                                           list(training_step_feature.shape[-1:]))
                     stacked = jnp.tile(stacked, list(p.shape) + [1])
 
-                    if self.delay_features == 4:
-                        inp = jnp.concatenate([inp_stack, stacked, stacked_dot], axis=-1)
-                    if self.delay_features == 5:
-                        inp = jnp.concatenate([inp_stack, stacked, stacked_norm], axis=-1)
-                    if self.delay_features == 6:
-                        inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
-                    if self.delay_features < 4 or self.delay_features > 6:
-                        inp = jnp.concatenate([inp_stack, stacked], axis=-1)
-
+                    stack_list = [inp_stack, stacked]
+                    for feat in self.delay_features:
+                        if feat in [4,6]:
+                            stack_list.append(stacked_dot)
+                            #inp = jnp.concatenate([inp_stack, stacked, stacked_dot], axis=-1)
+                        if feat in [5,6]:
+                            stack_list.append(stacked_norm)
+                            #inp = jnp.concatenate([inp_stack, stacked, stacked_norm], axis=-1)
+                        #if feat == 6:
+                        #    inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
+                        #if self.delay_features < 4 or self.delay_features > 6:
+                        #    inp = jnp.concatenate([inp_stack, stacked], axis=-1)
+                    inp = jnp.concatenate(stack_list, axis=-1)
                     #inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
 
                     return (inp)
@@ -542,7 +552,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     else:
                         did_reshape = False
 
-                    if self.delay_features > 0:
+                    if self.delay_features != [0]:
                         inp = features_withdelay(p,g,m,abs_m,o_p)
                     else:
                         inp = features_normal(p,g,m,o_p)
