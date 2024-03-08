@@ -65,7 +65,7 @@ def parse_args():
     parser.add_argument("--delay_optim_test", action="store_true")
     #parser.add_argument("--delay_features", type=int, default=0) #Using additional specific delay features
     parser.add_argument('--delay_features', nargs='+', default=['0'], help='List of additional delay features')
-    parser.add_argument("--delayed_compensation_method", type=str, choices=["None",
+    parser.add_argument("--delayed_compensation_method", type=str, default='None', choices=["None",
                                                                           "DC",
                                                                           "DC-diag",
                                                                           "SA",
