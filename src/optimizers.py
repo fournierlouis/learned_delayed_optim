@@ -11,7 +11,7 @@ from learned_optimization.learned_optimizers.adafac_mlp_lopt import AdafacMLPLOp
 from learned_optimization.learned_optimizers.mlp_lopt import MLPLOpt
 
 from delay_adafac_mlp_lopt import DelayAdafacMLPLOpt
-from delay_mlp_lopt import DelayMLPLOpt
+from delay_mlp_lopt import DelayMLPLOpt, rolling_abs_mom
 
 from fed_adafac_mlp_lopt import FedAdafacMLPLOpt
 from fed_mlp_lopt import FedMLPLOpt
@@ -79,6 +79,21 @@ class AdamWLinearCosine(OptaxOptimizer):
 #         opt = optax.adamw(self.schedule_)
 #         super().__init__(opt)
 
+def staleness_aware(grad, delay):
+    return grad / delay
+
+def gap_aware(grad, param, old_param, initial_lr, abs_momentum):
+    abs_diff = jnp.abs(param - old_param)
+    ratio = abs_momentum * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+    return jax.lax.reciprocal(1 + initial_lr * ratio) * grad
+
+def delay_compensation(grad, param, old_param):
+    dot_feat = jnp.einsum('...,...->', param - old_param, grad)
+    return (1 + dot_feat) * grad
+
+def delay_compensation_diag(grad, param, old_param):
+    return grad + grad * grad * (param - old_param)
+
 
 @gin.configurable
 class AdamW(OptaxOptimizer):
@@ -97,6 +112,7 @@ def _sgd(args):
     task = get_task(args)
 
     do_delay = args.delay_optim_test
+    learning_rate = args.learning_rate
 
     @jax.jit
     def update_nodelay(opt_state, key, batch):
@@ -112,7 +128,7 @@ def _sgd(args):
         return opt.update(opt_state, grad, loss=l, model_state=s), l
 
     @jax.jit
-    def update_delay(opt_state, key, batch, delayed_gradients_state):
+    def update_delay(opt_state, key, batch, delayed_gradients_state, delay_params_state, abs_rolling_features):
         params = opt.get_params(opt_state)
 
         if args.needs_state:
@@ -123,14 +139,35 @@ def _sgd(args):
             s = None
 
         new_dg_state, grad = delayed_gradients(args.delay).update(delayed_gradients_state, grad)
+
+        new_dp_state, old_params = delayed_gradients(args.delay).update(delay_params_state, params)
+
+        next_abs_rolling_features = rolling_abs_mom(decay=0.9).update(abs_rolling_features, grad)
             
         delayed_gradients_state = tree_utils.match_type(new_dg_state,
                                                      delayed_gradients_state)
 
+        delay_params_state = tree_utils.match_type(new_dp_state,
+                                                     delay_params_state)
+
+        abs_rolling_features = tree_utils.match_type(next_abs_rolling_features,
+                                                     abs_rolling_features)
+
+        if args.delayed_compensation_method != 'None':
+            if args.delayed_compensation_method == 'DC':
+                grad = delay_compensation(grad=grad, param=params, old_param=old_params)
+            if args.delayed_compensation_method == 'DC-diag':
+                grad = delay_compensation_diag(grad=grad, param=params, old_param=old_params)
+            if args.delayed_compensation_method == 'SA':
+                grad = staleness_aware(grad=grad, delay=args.delay)
+            if args.delayed_compensation_method == 'GA':
+                grad = gap_aware(grad=grad, param=params, old_param=old_params,
+                                 initial_lr=learning_rate, abs_momentum=next_abs_rolling_features.m)
+
         return jax.lax.cond(delayed_gradients_state.update,
-            lambda o, g, l, s, d: (opt.update(o,g,loss=l,model_state=s), l, d), 
-            lambda o, g, l, s, d: (o, l, d),
-            opt_state, grad, l, s, delayed_gradients_state)
+            lambda o, g, l, s, d, dp, arf: (opt.update(o,g,loss=l,model_state=s), l, d, dp ,arf),
+            lambda o, g, l, s, d, dp, arf: (o, l, d, dp ,arf),
+            opt_state, grad, l, s, delayed_gradients_state, delay_params_state, abs_rolling_features)
 
     if do_delay:
         update = update_delay
@@ -544,9 +581,9 @@ def get_optimizer(args):
         "fedlagg-adafac": _fedlagg,
 
         #"adafac": _delay_trainer,
-        #"delay-adafac": _delay_trainer,
+        "delay-adafac": _delay,
         #"mlp": _delay_trainer,
-        #"delay-mlp": _delay_meta_trainer
+        "delay-mlp": _delay
     }
 
     return optimizers[args.optimizer](args)  # TODO Find better way to do this
