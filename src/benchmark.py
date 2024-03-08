@@ -9,6 +9,7 @@ from optimizers import get_optimizer
 from tasks import get_task
 
 from delay_utils import delayed_gradients
+from delay_mlp_lopt import rolling_abs_mom
 
 def rename_batch(batch, label_map):
     return {label_map[k]:v for k,v in batch.items()}
@@ -47,12 +48,17 @@ def benchmark(args):
 
         if args.delay_optim_test:
             delay_gradients_state = delayed_gradients(args.delay).init(params)
+            delay_params_state = delayed_gradients(args.delay).init(params)
+            abs_rolling_features = rolling_abs_mom(decay=0.9).init(params)
 
         for _ in tqdm(range(args.num_inner_steps), ascii=True, desc="Inner Loop"):
             batch = rename_batch(next(task.datasets.train), data_label_map)
             key, key1 = jax.random.split(key)
             if args.delay_optim_test:
-                opt_state, loss, delay_gradients_state = update(opt_state, key1, batch, delay_gradients_state)
+                opt_state, loss, delay_gradients_state, abs_rolling_features = update(opt_state, key1, batch,
+                                                                                      delay_gradients_state,
+                                                                                      delay_params_state,
+                                                                                      abs_rolling_features)
                 #print("up", delay_gradients_state.i, delay_gradients_state.update)
             else:
                 opt_state, loss = update(opt_state, key1, batch)
