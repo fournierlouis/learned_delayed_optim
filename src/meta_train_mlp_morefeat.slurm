@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=train_adafac        # name of job
+#SBATCH --job-name=train_mlp_morefeat        # name of job
 # Other partitions are usable by activating/uncommenting
 # one of the 5 following directives:
 #SBATCH -A wjm@a100
@@ -20,8 +20,8 @@
 # /!\ Caution, "multithread" in Slurm vocabulary refers to hyperthreading.
 #SBATCH --hint=nomultithread         # hyperthreading is deactivated
 #SBATCH --time=12:00:00             # maximum execution time requested (HH:MM:SS)
-#SBATCH --output=gpu_mlp_meta%j.out    # name of output file
-#SBATCH --error=gpu_mlp_meta%j.out     # name of error file (here, in common with the output file)
+#SBATCH --output=logs/gpu_mlp_meta%j.out    # name of output file
+#SBATCH --error=logs/gpu_mlp_meta%j.out     # name of error file (here, in common with the output file)
 
 # Cleans out the modules loaded in interactive and inherited by default
 module purge

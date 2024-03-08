@@ -43,6 +43,27 @@ class DelayMLPLOptState:
 # outerproduct grad * (diff of parameters @ outerproduct?)
 # grad: f, diff: f,  out@diff = f -> pas d'interet si deja grad@iff non? a voir, out=fxf (trop), grad@diff=1 ok
 
+
+def rolling_abs_mom(decay: float) -> common._InitUpdate:
+  """Acculator to keep track of momentum."""
+
+  def init_fn(p: Any) -> common.MomAccumulator:
+    return common.MomAccumulator(
+        m=jax.tree_util.tree_map(jnp.zeros_like, p),
+        t=jnp.asarray(0, dtype=jnp.int32))
+
+  def update_fn(state: common.MomAccumulator, grad: Any) -> common.MomAccumulator:
+    m = jax.tree_util.tree_map(lambda a, b: decay * a + (1 - decay) * jnp.abs(b),
+                               state.m, grad)
+    return common.MomAccumulator(m=m, t=state.t + 1)
+
+  return common._InitUpdate(init_fn, update_fn)
+
+
+def vec_rolling_abs_mom(decays: jnp.ndarray) -> common._InitUpdate:
+  """Vectorized accumulator to keep track of multiple momentum decays."""
+  return common._vmap_accumulator(rolling_abs_mom, decays)
+
 @gin.configurable
 class DelayMLPLOpt(lopt_base.LearnedOptimizer):
     """Learned optimizer leveraging a per parameter MLP. + Delayed gradients
@@ -159,7 +180,7 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     params=params,
                     state=model_state,
                     rolling_features=common.vec_rolling_mom(decays).init(params),
-                    abs_rolling_features=common.vec_rolling_mom(decays).init(params),
+                    abs_rolling_features=vec_rolling_abs_mom(decays).init(params),
                     iteration=jnp.asarray(0, dtype=jnp.int32),
                     delayed_gradients_acc=delayed_gradients(delay).init(params),
                     delayed_param_acc=delayed_gradients(delay).init(params)) # if delay_features > 0 else None)
@@ -247,8 +268,8 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                 next_rolling_features = common.vec_rolling_mom(decays).update(
                     opt_state.rolling_features, grad)
 
-                next_abs_rolling_features = common.vec_rolling_mom(decays).update(
-                    opt_state.rolling_features, jnp.abs(grad))
+                next_abs_rolling_features = vec_rolling_abs_mom(decays).update(
+                    opt_state.rolling_features, grad)
 
                 training_step_feature = _tanh_embedding(opt_state.iteration)
 
