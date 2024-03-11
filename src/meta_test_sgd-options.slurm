@@ -47,9 +47,10 @@ python3.11 src/main.py \
     --wandb_dir $STORE/jax_wandb\
     --delay_optim_test\
     --delay ${delay}\
-    --slurm_id $SLURM_ARRAY_TASK_ID
-#TFDS_DATA_DIR=$STORE/tf_datasets WANDB_DIR=$STORE/jax_wandb python src/main.py \
+    --slurm_id $SLURM_ARRAY_TASK_ID\
     --delayed_compensation_method ${method}
+#TFDS_DATA_DIR=$STORE/tf_datasets WANDB_DIR=$STORE/jax_wandb python src/main.py \
+
 
 
 #    --config config/meta_train/meta_train_delay_mlp_image-mlp-fmst_schedule_3e-3_10000_d3.py \
