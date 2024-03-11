@@ -55,7 +55,7 @@ def benchmark(args):
             batch = rename_batch(next(task.datasets.train), data_label_map)
             key, key1 = jax.random.split(key)
             if args.delay_optim_test:
-                opt_state, loss, delay_gradients_state, abs_rolling_features = update(opt_state, key1, batch,
+                opt_state, loss, delay_gradients_state, delay_params_state, abs_rolling_features = update(opt_state, key1, batch,
                                                                                       delay_gradients_state,
                                                                                       delay_params_state,
                                                                                       abs_rolling_features)

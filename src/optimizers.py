@@ -80,19 +80,28 @@ class AdamWLinearCosine(OptaxOptimizer):
 #         super().__init__(opt)
 
 def staleness_aware(grad, delay):
-    return grad / delay
+    grad = jax.tree_util.tree_map(lambda g: g / delay,
+                               grad)
+    return grad
 
 def gap_aware(grad, param, old_param, initial_lr, abs_momentum):
-    abs_diff = jnp.abs(param - old_param)
-    ratio = abs_momentum * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
-    return jax.lax.reciprocal(1 + initial_lr * ratio) * grad
+    #abs_diff = jnp.abs(param - old_param)
+    #ratio = abs_momentum * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+    
+    grad = jax.tree_util.tree_map(lambda g, a_m, p, op: jax.lax.reciprocal(1 + initial_lr * a_m * jax.lax.reciprocal(1e-8 + jnp.abs(p-op))) * g,
+                               grad, abs_momentum, param, old_param)
+    
+    return grad
 
 def delay_compensation(grad, param, old_param):
-    dot_feat = jnp.einsum('...,...->', param - old_param, grad)
-    return (1 + dot_feat) * grad
+    grad = jax.tree_util.tree_map(lambda g, p, op: (1 + jnp.einsum('...,...->', p - op, g)) * g,
+                               grad, param, old_param)
+    return grad
 
 def delay_compensation_diag(grad, param, old_param):
-    return grad + grad * grad * (param - old_param)
+    grad = jax.tree_util.tree_map(lambda g, p, op: g + g * g * (p-op),
+                               grad, param, old_param)
+    return grad
 
 
 @gin.configurable
