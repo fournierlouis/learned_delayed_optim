@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import ast
 
 from jax.lib import xla_bridge
 import wandb
@@ -64,7 +65,7 @@ def parse_args():
     parser.add_argument("--delay", type=int, default=4)
     parser.add_argument("--delay_optim_test", action="store_true")
     #parser.add_argument("--delay_features", type=int, default=0) #Using additional specific delay features
-    parser.add_argument('--delay_features', nargs='+', default=['0'], help='List of additional delay features')
+    parser.add_argument('--delay_features', type=str, default='[0]', help='List of additional delay features')
     parser.add_argument("--delayed_compensation_method", type=str, default='None', choices=["None",
                                                                           "DC",
                                                                           "DC-diag",
@@ -117,6 +118,10 @@ if __name__ == "__main__":
     print(xla_bridge.get_backend().platform)
 
     args = parse_args()
+    
+    args.delay_features = ast.literal_eval(args.delay_features)
+    args.delay_features = [int(i) for i in args.delay_features]
+    print("delay features", args.delay_features)
 
     sys.path.append(os.getcwd())
     os.environ["TFDS_DATA_DIR"] = args.tfds_data_dir
