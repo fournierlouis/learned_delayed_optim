@@ -370,6 +370,10 @@ def _delay(args):
 
     do_delay = args.delay_optim_test
 
+    with open(args.test_checkpoint, "rb") as f:
+        meta_params = pickle.load(f)
+    opt = opt.opt_fn(meta_params)
+
     @jax.jit
     def update_nodelay(opt_state, key, batch):
         params = opt.get_params(opt_state)
