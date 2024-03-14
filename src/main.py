@@ -119,7 +119,8 @@ if __name__ == "__main__":
 
     args = parse_args()
     
-    args.delay_features = ast.literal_eval(args.delay_features)
+    d_f_string = args.delay_features
+    args.delay_features = ast.literal_eval(d_f_string)
     args.delay_features = [int(i) for i in args.delay_features]
     print("delay features", args.delay_features)
 
@@ -146,7 +147,7 @@ if __name__ == "__main__":
     cfg.name = "{}{}_{}{}".format(
         cfg.optimizer, cfg.hidden_size, cfg.task, cfg.name_suffix
     )
-    cfg.meta_train_name = "{}{}_{}_K{}_H{}_{}{}".format(
+    cfg.meta_train_name = "{}{}_{}_K{}_H{}_{}{}_feat{}".format(
         cfg.optimizer,
         cfg.hidden_size,
         cfg.task,
@@ -154,6 +155,7 @@ if __name__ == "__main__":
         cfg.num_local_steps,
         cfg.local_learning_rate,
         cfg.name_suffix,
+        d_f_string
     )
 
     if cfg.wandb_checkpoint_id is not None:

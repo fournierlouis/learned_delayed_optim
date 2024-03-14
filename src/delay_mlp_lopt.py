@@ -483,12 +483,27 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                             inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
                                                         )
                             #etas
-    
-    
+                            
                         if feat == 33:
                             #abs_m
                             inps.append(abs_m)
+                    
+                        if feat == 34:#9:
+                            #gap_aware INVERSE (?)
+                            ratio = jnp.expand_dims(abs_diff, axis=-1)  * jax.lax.reciprocal(1e-8 + abs_m)
+                            inps.append(jax.lax.reciprocal(1 + eta*ratio) * jnp.expand_dims(g, axis=-1),
+                                                        )
+                            #etas
 
+                        if feat == 36:
+                            inps.append(abs_m * jnp.expand_dims(g, axis=-1),
+                                                        )
+                        if feat == 37:
+                            inps.append(abs_m * jnp.expand_dims(g, axis=-1),
+                                                        )
+                            inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
+                                        )
+                            
                     inp_stack = jnp.concatenate(inps, axis=-1)
                     axis = list(range(len(p.shape)))
 
@@ -498,16 +513,6 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     #if self.delay_features == 3:
                     #    inp_stack = jnp.concatenate([inp_stack, jax.lax.reciprocal(1e-8 + m)])
 
-                    dot_feat = jnp.einsum('...,...->', diff, g)
-                    stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +
-                                              list(dot_feat.shape[-1:]))
-                    stacked_dot = jnp.tile(stacked_dot, list(p.shape) + [1])
-
-                    norm = jnp.sum(jnp.mean(jnp.square(diff)))
-
-                    stacked_norm = jnp.reshape(norm, [1] * len(axis) +
-                                               list(norm.shape[-1:]))
-                    stacked_norm = jnp.tile(stacked_norm, list(p.shape) + [1])
 
                     # once normalized, add features that are constant across tensor.
                     # namly the training step embedding.
@@ -519,10 +524,44 @@ class DelayMLPLOpt(lopt_base.LearnedOptimizer):
                     stack_list = [inp_stack, stacked]
                     for feat in self.delay_features:
                         if feat in [4,6]:
+                            
+                            dot_feat = jnp.einsum('...,...->', diff, g)
+                            stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +
+                                                      list(dot_feat.shape[-1:]))
+                            stacked_dot = jnp.tile(stacked_dot, list(p.shape) + [1])
+
+                    
+                    
                             stack_list.append(stacked_dot)
                             #inp = jnp.concatenate([inp_stack, stacked, stacked_dot], axis=-1)
                         if feat in [5,6]:
+
+                            norm = jnp.sum(jnp.mean(jnp.square(diff)))
+
+                            stacked_norm = jnp.reshape(norm, [1] * len(axis) +
+                                                       list(norm.shape[-1:]))
+                            stacked_norm = jnp.tile(stacked_norm, list(p.shape) + [1])
                             stack_list.append(stacked_norm)
+                            
+                            
+                        if feat in [35]:
+
+                            norm = jnp.sqrt(jnp.sum(jnp.mean(jnp.square(diff))))
+
+                            stacked_norm = jnp.reshape(norm, [1] * len(axis) +
+                                                       list(norm.shape[-1:]))
+                            stacked_norm = jnp.tile(stacked_norm, list(p.shape) + [1])
+                            stack_list.append(stacked_norm)
+                        if feat in [38]:
+                            
+                            dot_feat = jnp.einsum('...,...->', abs_diff, g)
+                            stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +
+                                                      list(dot_feat.shape[-1:]))
+                            stacked_dot = jnp.tile(stacked_dot, list(p.shape) + [1])
+
+                    
+                    
+                            stack_list.append(stacked_dot)
                             #inp = jnp.concatenate([inp_stack, stacked, stacked_norm], axis=-1)
                         #if feat == 6:
                         #    inp = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
