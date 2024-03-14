@@ -151,7 +151,27 @@ def _sgd(args):
 
         new_dp_state, old_params = delayed_gradients(args.delay).update(delay_params_state, params)
 
-        next_abs_rolling_features = rolling_abs_mom(decay=0.9).update(abs_rolling_features, grad)
+        if args.delayed_compensation_method != 'None' and args.delayed_compensation_before:
+            if args.delayed_compensation_method == 'DC':
+                grad = delay_compensation(grad=grad, param=params, old_param=old_params)
+            if args.delayed_compensation_method == 'DC-diag':
+                grad = delay_compensation_diag(grad=grad, param=params, old_param=old_params)
+            if args.delayed_compensation_method == 'SA':
+                grad = staleness_aware(grad=grad, delay=args.delay)
+            if args.delayed_compensation_method == 'GA':
+                if args.gap_aware_abs_mom_before:
+                    next_abs_rolling_features = rolling_abs_mom(decay=0.9).update(abs_rolling_features, grad)
+
+                    grad = gap_aware(grad=grad, param=params, old_param=old_params,
+                                     initial_lr=learning_rate, abs_momentum=next_abs_rolling_features.m)
+                else:
+                    grad = gap_aware(grad=grad, param=params, old_param=old_params,
+                                     initial_lr=learning_rate, abs_momentum=abs_rolling_features.m)
+
+
+
+        if not args.gap_aware_abs_mom_before:
+            next_abs_rolling_features = rolling_abs_mom(decay=0.9).update(abs_rolling_features, grad)
             
         delayed_gradients_state = tree_utils.match_type(new_dg_state,
                                                      delayed_gradients_state)
@@ -162,7 +182,7 @@ def _sgd(args):
         abs_rolling_features = tree_utils.match_type(next_abs_rolling_features,
                                                      abs_rolling_features)
 
-        if args.delayed_compensation_method != 'None':
+        if args.delayed_compensation_method != 'None' and not args.delayed_compensation_before:
             if args.delayed_compensation_method == 'DC':
                 grad = delay_compensation(grad=grad, param=params, old_param=old_params)
             if args.delayed_compensation_method == 'DC-diag':
@@ -368,7 +388,7 @@ def _delay(args):
 
     task = get_task(args)
 
-    do_delay = args.delay_optim_test
+    do_delay = True
 
     with open(args.test_checkpoint, "rb") as f:
         meta_params = pickle.load(f)
