@@ -37,6 +37,7 @@ from learned_optimization.learned_optimizers.adafac_mlp_lopt import (
     second_moment_normalizer,
     tanh_embedding,
 )
+from delay_mlp_lopt import vec_rolling_abs_mom
 
 # To add
 # Staleness aware: add tau (useless)
@@ -61,6 +62,7 @@ class DelayAdafacMLPLOptState:
   iteration: jnp.ndarray
   delayed_gradients_acc: DelayedGradientsAccumulator
   delayed_param_acc: Any
+  abs_mom_rolling : common.MomAccumulator
   #delayed_param_acc: DelayedGradientsAccumulator
 
 @gin.configurable
@@ -79,7 +81,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
                make_separate_weights=False,
                split_weights=False,
                delay=0,
-               delay_features=0):
+               delay_features=[],
+               eta=1.0):
     super().__init__()
     self._exp_mult = exp_mult
     self._step_mult = step_mult
@@ -93,17 +96,19 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
     self._split_weights = split_weights
     self._delay = delay
     self._delay_features = delay_features
+    self._eta = eta
 
     self._mod_init, self._mod_apply = hk.without_apply_rng(
         hk.transform(self._mod))
 
-  def _mod(self, global_feat, p, g, m, o_p, rms, fac_g, fac_vec_col, fac_vec_row,
-           fac_vec_v):
+  def _mod(self, global_feat, p, g, m, abs_m, o_p, rms, fac_g, fac_vec_col, fac_vec_row,
+           fac_vec_v, eta):
     # this doesn't work with scalar parameters, so instead lets just reshape.
     if not p.shape:
       p = jnp.expand_dims(p, 0)
       g = jnp.expand_dims(g, 0)
       m = jnp.expand_dims(m, 0)
+      abs_m = jnp.expand_dims(abs_m, 0)
       rms = jnp.expand_dims(rms, 0)
       fac_g = jnp.expand_dims(fac_g, 0)
       fac_vec_v = jnp.expand_dims(fac_vec_v, 0)
@@ -114,26 +119,20 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
       did_reshape = False
     inps = []
 
-    inps.append(jnp.expand_dims(g, axis=-1))
+    batch_g = jnp.expand_dims(g, axis=-1)
+    inps.append(batch_g)
 
-    if self._delay_features > 0:
-        # feature consisting of raw difference of parameters values
-        diff = p - o_p
+    # feature consisting of raw difference of parameters values
+    diff = p - o_p
 
-        batch_dp = jnp.expand_dims(diff, axis=-1)
-        inps.append(batch_dp)
+    batch_dp = jnp.expand_dims(diff, axis=-1)
 
-        # feature consisting of raw difference of parameters values
-        abs_diff = jnp.abs(p - o_p)
-        batch_dp = jnp.expand_dims(abs_diff, axis=-1)
-        inps.append(batch_dp)
+    # feature consisting of raw difference of parameters values
+    abs_diff = jnp.abs(p - o_p)
+    batch_adp = jnp.expand_dims(abs_diff, axis=-1)
 
     inps.append(jnp.expand_dims(p, axis=-1))
     inps.append(m)
-
-    if self._delay_features > 0:
-        # feature consisting of all momentum values reciprocal also
-        inps.append(jax.lax.reciprocal(1e-8 + m))
 
     inps.append(rms)
     rsqrt = lax.rsqrt(rms + 1e-6)
@@ -186,12 +185,216 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
       fac_mom_mult = m * (fac_vec_v + 1e-6)**-0.5
       inps.append(fac_mom_mult)
 
+    for feat in self.delay_features:
+        if feat in [1, 6]:
+            inps.append(batch_dp)
+
+        if feat in [2, 6]:
+            inps.append(batch_adp)
+
+        # feature consisting of all momentum values reciprocal also
+        if feat == 3:
+            inps.append(jax.lax.reciprocal(1e-8 + m))
+
+        if feat == 7:
+            # delay-compensation
+            dot_feat = jnp.einsum('...,...->', diff, g)
+            inps.append(jnp.expand_dims(dot_feat * g, axis=-1))
+
+        if feat == 8:
+            # delay-compensation diagonal only
+            outer_prod_diag = g * g
+            inps.append(jnp.expand_dims(outer_prod_diag * diff, axis=-1))
+
+        if feat == 9:
+            # gap_aware
+            ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+            inps.append(jax.lax.reciprocal(1 + eta * ratio) * jnp.expand_dims(g, axis=-1),
+                        )
+            # etas
+
+        if feat == 10:
+            # gap_aware (with no abs)
+            ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + diff), axis=-1)
+            inps.append(jax.lax.reciprocal(1 + eta * ratio) * jnp.expand_dims(g, axis=-1),
+                        )
+            # etas
+
+        if feat == 11:
+            # Wtf was I doing?
+            inps.append(m * jnp.expand_dims(g, axis=-1),
+                        )
+            inps.append(m * jnp.expand_dims(abs_diff, axis=-1),
+                        )
+
+        if feat == 12:
+            # Same here
+            inps.append(m * jnp.expand_dims(g, axis=-1),
+                        )
+            inps.append(m * jnp.expand_dims(abs_diff, axis=-1),
+                        )
+            inps.append(m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + g), axis=-1),
+                        )
+            inps.append(m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1),
+                        )
+
+        if feat == 13:
+            inps.append(m * jnp.expand_dims(g, axis=-1),
+                        )
+            inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
+                        )
+
+        if feat == 14:
+            inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
+                        )
+            inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
+                        )
+
+        if feat == 15:
+            inps.append(m * jnp.expand_dims(g, axis=-1),
+                        )
+            inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
+                        )
+            inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
+                        )
+            inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
+                        )
+
+        if feat == 16:
+            # One at a..
+            inps.append(m * jnp.expand_dims(g, axis=-1),
+                        )
+
+        if feat == 17:
+            # ..time
+            inps.append(jnp.expand_dims(abs_diff * g, axis=-1),
+                        )
+
+        if feat == 18:
+            # One at a..
+            inps.append(jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(g, axis=-1),
+                        )
+
+        if feat == 19:
+            # ..time
+            inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
+                        )
+
+        if feat == 20:
+            # gap_aware ratio
+            ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+            inps.append(ratio)
+            # etas
+
+        if feat == 21:
+            # gap_aware INVERSE ratio
+            ratio = jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(abs_diff, axis=-1)
+            inps.append(ratio)
+            # etas
+
+        if feat == 22:
+            # gap_aware ratio
+            ratio = m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+            inps.append(ratio * batch_g)
+            # etas
+
+        if feat == 23:
+            # gap_aware INVERSE ratio
+            ratio = jax.lax.reciprocal(1e-8 + m) * jnp.expand_dims(abs_diff, axis=-1)
+            inps.append(ratio * batch_g)
+            # etas
+
+        if feat == 24:
+            # delay-compensation momentum
+            dot_feat = jnp.einsum('...,b...->', diff, g)
+            inps.append(dot_feat * m)
+
+        if feat == 25:
+            # delay-compensation diagonal only  momentum
+            outer_prod_diag = m * m
+            inps.append(outer_prod_diag * jnp.expand_dims(diff, axis=-1))
+
+        if feat == 26:
+            # delay-compensation
+            dot_feat = jnp.einsum('...,...->', abs_diff, g)
+            inps.append(jnp.expand_dims(dot_feat * g, axis=-1))
+
+        if feat == 27:
+            # delay-compensation diagonal only
+            outer_prod_diag = g * g
+            inps.append(jnp.expand_dims(outer_prod_diag * abs_diff, axis=-1))
+
+        if feat == 28:  # 20:
+            # gap_aware ratio
+            ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+            inps.append(ratio)
+            # etas
+
+        if feat == 29:  # 21:
+            # gap_aware INVERSE ratio
+            ratio = jax.lax.reciprocal(1e-8 + abs_m) * jnp.expand_dims(abs_diff, axis=-1)
+            inps.append(ratio)
+            # etas
+
+        if feat == 30:  # 22:
+            # gap_aware ratio
+            ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+            inps.append(ratio * batch_g)
+            # etas
+
+        if feat == 31:  # 23:
+            # gap_aware INVERSE ratio
+            ratio = jax.lax.reciprocal(1e-8 + abs_m) * jnp.expand_dims(abs_diff, axis=-1)
+            inps.append(ratio * batch_g)
+            # etas
+
+        if feat == 32:  # 9:
+            # gap_aware
+            ratio = abs_m * jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff), axis=-1)
+            inps.append(jax.lax.reciprocal(1 + eta * ratio) * jnp.expand_dims(g, axis=-1),
+                        )
+            # etas
+
+        if feat == 33:
+            # abs_m
+            inps.append(abs_m)
+
+        if feat == 34:  # 9:
+            # gap_aware INVERSE (?)
+            ratio = jnp.expand_dims(abs_diff, axis=-1) * jax.lax.reciprocal(1e-8 + abs_m)
+            inps.append(jax.lax.reciprocal(1 + eta * ratio) * jnp.expand_dims(g, axis=-1),
+                        )
+            # etas
+
+        if feat == 36:
+            inps.append(abs_m * jnp.expand_dims(g, axis=-1),
+                        )
+        if feat == 37:
+            inps.append(abs_m * jnp.expand_dims(g, axis=-1),
+                        )
+            inps.append(jnp.expand_dims(jax.lax.reciprocal(1e-8 + abs_diff) * g, axis=-1),
+                        )
+
     # Build the weights of the NN
     last_size = jnp.concatenate(inps, axis=-1).shape[-1]
     last_size += global_feat["training_step_feature"].shape[-1]
-    if self._delay_features > 0:
-        last_size += jnp.einsum('...,...->', diff, g).shape[-1]
-        last_size += jnp.sum(jnp.mean(jnp.square(diff))).shape[-1]
+    #if self._delay_features > 0:
+    #    last_size += jnp.einsum('...,...->', diff, g).shape[-1]
+    #    last_size += jnp.sum(jnp.mean(jnp.square(diff))).shape[-1]
+
+    for feat in self.delay_features:
+        if feat in [4, 6]:
+            dot_feat = jnp.einsum('...,...->', diff, g)
+            last_size += dot_feat.shape[-1]
+        if feat in [5, 6]:
+            norm = jnp.sum(jnp.mean(jnp.square(diff)))
+            last_size += norm.shape[-1]
+        if feat in [35]:
+            norm_sqrt = jnp.sqrt(jnp.sum(jnp.mean(jnp.square(diff))))
+            last_size += norm_sqrt.shape[-1]
+        if feat in [38]:
+            abs_dot_feat = jnp.einsum('...,...->', abs_diff, g)
+            last_size += abs_dot_feat.shape[-1]
 
 
     weights = []
@@ -258,21 +461,31 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
                             list(training_step_feature.shape[-1:]))
       stacked = jnp.tile(stacked, list(p.shape) + [1])
 
-      if self._delay_features > 0:
-        dot_feat = jnp.einsum('...,...->', diff, g)
-        stacked_dot = jnp.reshape(dot_feat, [1] * len(axis) +
-                                    list(dot_feat.shape[-1:]))
-        stacked_dot = jnp.tile(stacked_dot, list(p.shape) + [1])
+      stack_list = [inp_stack, stacked]
 
-        norm = jnp.sum(jnp.mean(jnp.square(diff)))
+      for feat in self.delay_features:
+          if feat in [4, 6]:
+              stacked_dot_feat = jnp.reshape(dot_feat, [1] * len(axis) +
+                                         list(dot_feat.shape[-1:]))
+              stacked_dot_feat = jnp.tile(stacked_dot_feat, list(p.shape) + [1])
+              stack_list.append(stacked_dot_feat)
+          if feat in [5, 6]:
+              stacked_norm = jnp.reshape(norm, [1] * len(axis) +
+                                         list(norm.shape[-1:]))
+              stacked_norm = jnp.tile(stacked_norm, list(p.shape) + [1])
+              stack_list.append(stacked_norm)
+          if feat in [35]:
+              stacked_norm_sqrt = jnp.reshape(norm_sqrt, [1] * len(axis) +
+                                         list(norm_sqrt.shape[-1:]))
+              stacked_norm_sqrt = jnp.tile(stacked_norm_sqrt, list(p.shape) + [1])
+              stack_list.append(stacked_norm_sqrt)
+          if feat in [38]:
+              stacked_abs_dot_feat = jnp.reshape(abs_dot_feat, [1] * len(axis) +
+                                         list(abs_dot_feat.shape[-1:]))
+              stacked_abs_dot_feat = jnp.tile(stacked_abs_dot_feat, list(p.shape) + [1])
+              stack_list.append(stacked_abs_dot_feat)
 
-        stacked_norm = jnp.reshape(norm, [1] * len(axis) +
-                                     list(norm.shape[-1:]))
-        stacked_norm = jnp.tile(stacked_norm, list(p.shape) + [1])
-
-        inp_stack = jnp.concatenate([inp_stack, stacked, stacked_dot, stacked_norm], axis=-1)
-      else:
-        inp_stack = jnp.concatenate([inp_stack, stacked], axis=-1)
+      inp_stack = jnp.concatenate(stack_list, axis=-1)
 
       # Manually run the neural network.
       net = inp_stack
@@ -318,25 +531,42 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
               else:
                 outs.append(training_step_feature[i] * w[vi, oi])  # pytype: disable=unsupported-operands
 
-            if self._delay_features > 0:
-              dot_feat = jnp.einsum('...,...->', diff, g)
+            ptr = vi + 1 + len(training_step_feature)
 
-              norm = jnp.sum(jnp.mean(jnp.square(diff)))
-              for i, vi in enumerate(
-              range(vi + 1 + len(training_step_feature),
-                    vi + 1 + len(training_step_feature) + len(dot_feat))):
-                if type(w) == list:  # pylint: disable=unidiomatic-typecheck
-                  outs.append(dot_feat[i] * w[vi][oi])
-                else:
-                  outs.append(dot_feat[i] * w[vi, oi])  # pytype: disable=unsupported-operands
+            for feat in self.delay_features:
+                if feat in [4, 6]:
+                    for i, vi in enumerate(
+                            range(ptr, ptr + len(dot_feat))):
+                        if type(w) == list:  # pylint: disable=unidiomatic-typecheck
+                            outs.append(dot_feat[i] * w[vi][oi])
+                        else:
+                            outs.append(dot_feat[i] * w[vi, oi])  # pytype: disable=unsupported-operands
+                        ptr += len(dot_feat)
+                if feat in [5, 6]:
+                    for i, vi in enumerate(
+                            range(ptr, ptr + len(norm))):
+                        if type(w) == list:  # pylint: disable=unidiomatic-typecheck
+                            outs.append(norm[i] * w[vi][oi])
+                        else:
+                            outs.append(norm[i] * w[vi, oi])  # pytype: disable=unsupported-operands
+                        ptr += len(norm)
+                if feat in [35]:
+                    for i, vi in enumerate(
+                            range(ptr, ptr + len(norm_sqrt))):
+                        if type(w) == list:  # pylint: disable=unidiomatic-typecheck
+                            outs.append(norm_sqrt[i] * w[vi][oi])
+                        else:
+                            outs.append(norm_sqrt[i] * w[vi, oi])  # pytype: disable=unsupported-operands
+                        ptr += len(norm_sqrt)
+                if feat in [38]:
+                    for i, vi in enumerate(
+                            range(ptr, ptr + len(abs_dot_feat))):
+                        if type(w) == list:  # pylint: disable=unidiomatic-typecheck
+                            outs.append(abs_dot_feat[i] * w[vi][oi])
+                        else:
+                            outs.append(abs_dot_feat[i] * w[vi, oi])  # pytype: disable=unsupported-operands
+                        ptr += len(abs_dot_feat)
 
-              for i, vi in enumerate(
-                range(vi + 1 + len(training_step_feature) + len(dot_feat),
-                      vi + 1 + len(training_step_feature) + len(dot_feat) + len(norm))):
-                if type(w) == list:  # pylint: disable=unidiomatic-typecheck
-                  outs.append(norm[i] * w[vi][oi])
-                else:
-                  outs.append(norm[i] * w[vi, oi])  # pytype: disable=unsupported-operands
 
           grids.append(outs)
 
@@ -393,13 +623,9 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
     c = 10
     p = jnp.ones([r, c])
     g = jnp.ones([r, c])
-    if self._delay_features > 0:
-        diff = jnp.ones([r, c])
-        abs_diff = jnp.ones([r, c])
 
     m = jnp.ones([r, c, len(self._initial_momentum_decays)])
-    if self._delay_features > 0:
-        recip = jnp.ones([r, c, len(self._initial_momentum_decays)])
+    abs_m = jnp.ones([r, c, len(self._initial_momentum_decays)])
 
     rms = jnp.ones([r, c, len(self._initial_rms_decays)])
 
@@ -407,12 +633,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
     fac_vec_row = jnp.ones([r, len(self._initial_adafactor_decays)])
     fac_vec_col = jnp.ones([c, len(self._initial_adafactor_decays)])
     fac_vec_v = jnp.ones([len(self._initial_adafactor_decays)])
-    if self._delay_features > 0:
-        mod_theta = self._mod_init(key, global_features, p, g, diff, abs_diff, m, recip,
-                                   rms, fac_g, fac_vec_col, fac_vec_row, fac_vec_v)
-    else:
-        mod_theta = self._mod_init(key, global_features, p, g, m, rms, fac_g,
-                               fac_vec_col, fac_vec_row, fac_vec_v)
+    mod_theta = self._mod_init(key, global_features, p, g, m, abs_m, rms, fac_g,
+                               fac_vec_col, fac_vec_row, fac_vec_v, eta)
     return hk.data_structures.to_haiku_dict({
         "momentum_decays": jnp.zeros([len(self._initial_momentum_decays)]),
         "rms_decays": jnp.zeros([len(self._initial_rms_decays)]),
@@ -449,7 +671,12 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
             decay_to_param(jnp.asarray(parent._initial_adafactor_decays)) +  # pylint: disable=protected-access
             self.theta["adafactor_decays"])
         fac_vec_roll = common.vec_factored_rolling(adafactor_decay)
-        return mom_roll, rms_roll, fac_vec_roll
+
+        abs_decay = param_to_decay(
+            decay_to_param(jnp.asarray(parent._initial_momentum_decays)) +  # pylint: disable=protected-access
+            self.theta["momentum_decays"])
+        abs_mom_roll = vec_rolling_abs_mom(abs_decay)
+        return mom_roll, rms_roll, fac_vec_roll, abs_mom_roll
 
       def init(
           self,
@@ -461,7 +688,7 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
         if num_steps is None:
           raise ValueError("Must specify number of steps for this lopt!")
 
-        mom_roll, rms_roll, fac_vec_roll = self._get_rolling()
+        mom_roll, rms_roll, fac_vec_roll, abs_mom_roll = self._get_rolling()
 
         return DelayAdafacMLPLOptState(
             params=params,
@@ -472,7 +699,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
             iteration=jnp.asarray(0, dtype=jnp.int32),
             num_steps=jnp.asarray(num_steps),
             delayed_gradients_acc=delayed_gradients(delay).init(params),
-            delayed_param_acc=delayed_gradients(delay).init(params))
+            delayed_param_acc=delayed_gradients(delay).init(params),
+            abs_mom_rolling=abs_mom_roll.init(params))
       def update_false(
           self,  # pytype: disable=signature-mismatch  # overriding-parameter-count-checks
           opt_state: DelayAdafacMLPLOptState,
@@ -495,7 +723,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
               state=opt_state.state,
               num_steps=opt_state.num_steps,
               delayed_gradients_acc=delayed_gradients_acc,
-              delayed_param_acc=delayed_param_acc)
+              delayed_param_acc=delayed_param_acc,
+              abs_mom_rolling=opt_state.abs_mom_rolling)
 
           return tree_utils.match_type(next_opt_state, opt_state)
       def update_true(
@@ -511,11 +740,12 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
           old_params: Any = None,
       ) -> DelayAdafacMLPLOptState:
         # jax.debug.print('true')
-        mom_roll, rms_roll, fac_vec_roll = self._get_rolling()
+        mom_roll, rms_roll, fac_vec_roll, abs_mom_roll = self._get_rolling()
         next_mom_rolling = mom_roll.update(opt_state.mom_rolling, grad)
         next_rms_rolling = rms_roll.update(opt_state.rms_rolling, grad)
         next_fac_rolling_features, fac_g = fac_vec_roll.update(
             opt_state.fac_rolling_features, grad)
+        next_abs_mom_rolling = abs_mom_roll.update(opt_state.abs_mom_rolling, grad)
 
         # compute some global features
         training_step_feature = tanh_embedding(opt_state.iteration)
@@ -534,7 +764,8 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
                                              next_rms_rolling.rms, fac_g,
                                              next_fac_rolling_features.v_col,
                                              next_fac_rolling_features.v_row,
-                                             next_fac_rolling_features.v_diag)
+                                             next_fac_rolling_features.v_diag,
+                                             next_abs_mom_rolling.m)
 
         next_opt_state = DelayAdafacMLPLOptState(
             params=next_params,
@@ -545,7 +776,7 @@ class DelayAdafacMLPLOpt(lopt_base.LearnedOptimizer):
             state=model_state,
             num_steps=opt_state.num_steps,
             delayed_gradients_acc=delayed_gradients_acc,
-            delayed_param_acc=delayed_params_acc)
+            abs_mom_rolling=next_abs_mom_rolling)
 
         return tree_utils.match_type(next_opt_state, opt_state)
 

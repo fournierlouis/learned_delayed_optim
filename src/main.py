@@ -149,7 +149,7 @@ if __name__ == "__main__":
     cfg.name = "{}{}_{}{}".format(
         cfg.optimizer, cfg.hidden_size, cfg.task, cfg.name_suffix
     )
-    cfg.meta_train_name = "{}{}_{}_K{}_H{}_{}{}_feat{}".format(
+    cfg.meta_train_name = "{}{}_{}_K{}_H{}_{}{}_feat{}_delay{}".format(
         cfg.optimizer,
         cfg.hidden_size,
         cfg.task,
@@ -157,7 +157,8 @@ if __name__ == "__main__":
         cfg.num_local_steps,
         cfg.local_learning_rate,
         cfg.name_suffix,
-        d_f_string
+        d_f_string,
+        cfg.delay
     )
 
     if cfg.wandb_checkpoint_id is not None:
