@@ -71,8 +71,8 @@ def parse_args():
                                                                           "DC-diag",
                                                                           "SA",
                                                                           "GA"])
-    parser.add_argument("--delayed_compensation_before", action="store_true")
-    parser.add_argument("--gap_aware_abs_mom_before", action="store_true")
+    parser.add_argument("--weight_prediction", action="store_true")     
+    parser.add_argument("--momentum", type=float, default=0.0)
 
 
     parser.add_argument("--eta", type=float, default=1.0) #eta in ratio for now

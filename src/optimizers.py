@@ -104,6 +104,7 @@ def delay_compensation_diag(grad, param, old_param):
     return grad
 
 
+
 @gin.configurable
 class AdamW(OptaxOptimizer):
     """Adam with a piecewise linear learning rate schedule."""
@@ -116,7 +117,11 @@ class AdamW(OptaxOptimizer):
         super().__init__(opt)
 
 def _sgd(args):
-    opt = optax_opts.SGD(learning_rate=args.learning_rate)
+    opt = optax_opts.SGDM(learning_rate=args.learning_rate, momentum=args.momentum)
+    
+    if args.weight_prediction:
+        lr_times_delay = args.learning_rate * args.delay
+        #opt_pred = optax.scale_by_learning_rate(args.learning_rate * args.delay) 
 
     task = get_task(args)
 
@@ -137,8 +142,36 @@ def _sgd(args):
         return opt.update(opt_state, grad, loss=l, model_state=s), l
 
     @jax.jit
+    def pred_true(state, opt_pred, params):
+        return(opt_pred.update(optax._src.base.EmptyState(), opt.get_state(opt_state))[1])
+    
+    def pred_false(state, opt_pred, params):
+        return(0)
+    
+    @jax.jit
     def update_delay(opt_state, key, batch, delayed_gradients_state, delay_params_state, abs_rolling_features):
         params = opt.get_params(opt_state)
+        
+        if args.weight_prediction:
+            params = jax.tree_util.tree_map(lambda p, m: p - lr_times_delay * m,
+                               params, opt_state.optax_opt_state[0].trace)
+            #print(jax.debug.print("p b4 {s} mom {m} af {sa}", s=params, m=opt_state.optax_opt_state[0].trace, sa=n_params))
+            #params = n_params
+            #new_s = opt_pred.update(opt_state, opt_state.optax_opt_state)[0].params #[0].trace))
+            #new_s = opt_pred.get_params(opt_pred.update(opt_state, opt_state.optax_opt_state))
+            #new_s = opt.update(opt_state, params, model_state=None)
+            #print("paramsb", params)
+            #print(jax.debug.print("p b4 {s}", s=params))
+            #print('news', new_s)
+            #params = new_s#[0].params #params for false grad
+            #print("paramsa", params)
+            
+            #print(jax.debug.print("de {s}", s=args.learning_rate * args.delay))
+            #print(jax.debug.print("mom? {s}", s=opt.get_state(opt_state)))
+            #print(jax.debug.print("mom? {s}", s=opt_state.optax_opt_state[0].trace))
+            #print(jax.debug.print("p af {s}", s=params))
+        
+            #params = jax.lax.cond(delayed_gradients_state.update,
 
         if args.needs_state:
             state = opt.get_state(opt_state)
@@ -147,31 +180,14 @@ def _sgd(args):
             l, grad = jax.value_and_grad(task.loss)(params, key, batch)
             s = None
 
+        if args.weight_prediction:
+            params = opt.get_params(opt_state)
+            
         new_dg_state, grad = delayed_gradients(args.delay).update(delayed_gradients_state, grad)
 
         new_dp_state, old_params = delayed_gradients(args.delay).update(delay_params_state, params)
 
-        if args.delayed_compensation_method != 'None' and args.delayed_compensation_before:
-            if args.delayed_compensation_method == 'DC':
-                grad = delay_compensation(grad=grad, param=params, old_param=old_params)
-            if args.delayed_compensation_method == 'DC-diag':
-                grad = delay_compensation_diag(grad=grad, param=params, old_param=old_params)
-            if args.delayed_compensation_method == 'SA':
-                grad = staleness_aware(grad=grad, delay=args.delay)
-            if args.delayed_compensation_method == 'GA':
-                if args.gap_aware_abs_mom_before:
-                    next_abs_rolling_features = rolling_abs_mom(decay=0.9).update(abs_rolling_features, grad)
-
-                    grad = gap_aware(grad=grad, param=params, old_param=old_params,
-                                     initial_lr=learning_rate, abs_momentum=next_abs_rolling_features.m)
-                else:
-                    grad = gap_aware(grad=grad, param=params, old_param=old_params,
-                                     initial_lr=learning_rate, abs_momentum=abs_rolling_features.m)
-
-
-
-        if not args.gap_aware_abs_mom_before:
-            next_abs_rolling_features = rolling_abs_mom(decay=0.9).update(abs_rolling_features, grad)
+        next_abs_rolling_features = rolling_abs_mom(decay=0.9).update(abs_rolling_features, grad)
             
         delayed_gradients_state = tree_utils.match_type(new_dg_state,
                                                      delayed_gradients_state)
@@ -182,7 +198,7 @@ def _sgd(args):
         abs_rolling_features = tree_utils.match_type(next_abs_rolling_features,
                                                      abs_rolling_features)
 
-        if args.delayed_compensation_method != 'None' and not args.delayed_compensation_before:
+        if args.delayed_compensation_method != 'None':
             if args.delayed_compensation_method == 'DC':
                 grad = delay_compensation(grad=grad, param=params, old_param=old_params)
             if args.delayed_compensation_method == 'DC-diag':
